@@ -1,0 +1,24 @@
+# Untracked directories
+/Results
+/ISBI Paper All
+/Autism_IMPAC_Git_Restored
+/Parallelization/TrainedModels/
+# Files over 4mb
+/Parallelization/Logs/
+/Parallelization/TrainedModels/
+/Results/
+TrainTestData2Atlas.p
+TrainTestData.p
+.idea/
+.ipynb_checkpoints/
+*.xlsx
+*.pdf
+/Parallelization/Locks/
+/Parallelization/__init__.py
+/Parallelization/__pycache__/
+/Parallelization/caffe-master/
+/Parallelization/proto/
+/Parallelization/protobuf-2.6.1/
+/Parallelization/snapshot/
+/Parallelization/venv/
+
