@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=all_atlas_01
-#SBATCH --partition=GPUp100
+#SBATCH --job-name=DenseNet_rerun
+#SBATCH --partition=GPUv100
 #SBATCH --nodes=2
 #SBATCH --ntasks=4
-#SBATCH --time=1-00:00:00
+#SBATCH --time=3-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
-#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_DenseAllAtlas.txt"
+#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_DenseRerun.txt"
 
 now=$(date +"%m-%d-%Y,%H:%M:%S")
 echo "Job start: $now"
@@ -14,7 +14,7 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=28
+CORES_PER_TASK=36
 
 INPUTS_COMMAND="ls -v ./IniFiles/D*"
 

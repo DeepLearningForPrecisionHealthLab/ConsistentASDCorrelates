@@ -110,6 +110,18 @@ cards_per_node = {
 
 lock_folder='/project/bioinformatics/DLLab/shared/LockFiles'
 
+def fPadZeros(sNuc):
+    """
+    Pads a Nucleus name to length 3, eg. makes
+    NucleusC26 -> NucleusC026
+    NucleusC1 -> NucleusC001
+    :param sNum: numerical string
+    :return: numerical string padded with preceding zeros to a len of 3
+    """
+    while len(sNuc)<11:
+        sNuc=sNuc[0:8]+'0'+sNuc[8:]
+    return sNuc
+
 def make_gpu_filelock(node_name=platform.node(), num_gpu=None, lock_path=lock_folder, overwrite=False):
     """
     This sets up the lock files for the node.
@@ -120,7 +132,10 @@ def make_gpu_filelock(node_name=platform.node(), num_gpu=None, lock_path=lock_fo
     :param overwrite: (bool) If the files exist, overwrite.
     :return: None
     """
+    node_name=fPadZeros(node_name)
+
     lock_file = os.path.join(lock_path,'%s.txt.lock'%node_name)
+    print(lock_file, node_name)
     txt_file = os.path.join(lock_path, '%s.txt'%node_name)
     if (not overwrite) and (os.path.exists(lock_file) and os.path.exists(txt_file)):
         print('Already made')
@@ -148,9 +163,13 @@ def use_and_lock_gpu(node_name=platform.node(), lock_path=lock_folder):
     :param lock_path: (str) The path to the lock folder
     :return: (int) The gpu index to use, this allows for deactivation later
     """
+    node_name = fPadZeros(node_name)
+
     print('The conda environment for the filelock_utilties: %s'%os.environ['CONDA_DEFAULT_ENV'])
-    lock_file = os.path.join(lock_path, '%s.txt.lock' % node_name)
-    txt_file = os.path.join(lock_path, '%s.txt' % node_name)
+    # lock_file = os.path.join(lock_path, '%s.txt.lock' % node_name)
+    # txt_file = os.path.join(lock_path, '%s.txt' % node_name)
+    lock_file = os.path.join(lock_path,'%s.txt.lock'%node_name)
+    txt_file = os.path.join(lock_path, '%s.txt'%node_name)
     with FileLock(lock_file):
         with open(os.path.join(os.getcwd(), txt_file), 'r+') as f:
             line = f.readline()
@@ -164,7 +183,9 @@ def use_and_lock_gpu(node_name=platform.node(), lock_path=lock_folder):
                     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_index)
                     return gpu_index
     #if it didnt finish in the loop no cards are available
-    raise IndexError('All gpus currently taken, too may jobs have been submitted to this node')
+    raise IndexError('All gpus currently taken, too may jobs have been submitted to this node\n'
+                     'Change in the .sh submit file:\n#SRUN arguments: '
+                     'CORES_PER_TASK=number of cpu nodes divided by n tasks')
 
 def unlock_gpu(gpu_index, node_name=platform.node(), lock_path=lock_folder):
     """
