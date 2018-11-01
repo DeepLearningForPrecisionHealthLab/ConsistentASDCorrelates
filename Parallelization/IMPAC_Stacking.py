@@ -48,6 +48,8 @@ import os
 import pickle as pkl
 from Parallelization.IMPAC_DenseNetwork import fReproduceModel
 
+np.random.seed(42)
+
 sModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputs'
 
 sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
@@ -107,7 +109,7 @@ for key in dXData.keys():
         None
 
 # Function to return the best fitting model for a given featureset
-def fGetBestModel(sDataPath, sFeatureName, bTrainable=False):
+def fGetBestModel(sDataPath, sFeatureName, bTrainable=True):
 
     # Initialize a dataframe to store values
     lsModelIndex=[]
@@ -162,12 +164,12 @@ for sFeatureTag in lsFeatureTags:
     dModels[sFeatureTag] = fGetBestModel(sDataPath, sFeatureTag)
 
 # concatenate model here, concatenating only 1 layer below the decision layer
-kerConcatLayer = ker.layers.concatenate([dModels['anatomy'].layers[-1].output,
-                                         dModels['basc122'].layers[-1].output,
-                                         dModels['craddock_scorr_mean'].layers[-1].output,
-                                         dModels['harvard_oxford_cort_prob_2mm'].layers[-1].output,
-                                         dModels['msdl'].layers[-1].output,
-                                         dModels['power_2011'].layers[-1].output
+kerConcatLayer = ker.layers.concatenate([dModels['anatomy'].layers[-2].output,
+                                         dModels['basc122'].layers[-2].output,
+                                         dModels['craddock_scorr_mean'].layers[-2].output,
+                                         dModels['harvard_oxford_cort_prob_2mm'].layers[-2].output,
+                                         dModels['msdl'].layers[-2].output,
+                                         dModels['power_2011'].layers[-2].output
                                          ], axis=-1)
 
 ###########################Test Model architecture########################################
@@ -182,26 +184,44 @@ kerDenseLayer = ker.layers.Dense(iWidth)(kerConcatLayer)
 kerDecisionLayer = ker.layers.Dense(1, activation='sigmoid')(kerDenseLayer)
 ###########################End Test Arch###########################################
 
-# Create Input layers for the taking in the data
-def fInputLayer(sDataType, sAtlas):
-    if sDataType=='anatomy':
-        aDataShape = [1, dXData[sDataType].shape[1], 1]
-    else:
-        aDataShape = [1, dXData[sDataType][sAtlas].shape[1], 1]
-    kerInput = ker.layers.Input(shape=aDataShape, name=sDataType+sAtlas)
-    return kerInput
-
 # Feed in individual inputs to the model along with validation data
-kerModel = ker.Model(inputs=[fInputLayer('anatomy'),
-                             fInputLayer('connectivity', lsFeatureTags[1]),
-                             fInputLayer('connectivity', lsFeatureTags[2]),
-                             fInputLayer('connectivity', lsFeatureTags[3]),
-                             fInputLayer('connectivity', lsFeatureTags[4]),
-                             fInputLayer('connectivity', lsFeatureTags[5])
+kerModel = ker.Model(inputs=[dModels[lsFeatureTags[0]].layers[0].input,
+                             dModels[lsFeatureTags[1]].layers[0].input,
+                             dModels[lsFeatureTags[2]].layers[0].input,
+                             dModels[lsFeatureTags[3]].layers[0].input,
+                             dModels[lsFeatureTags[4]].layers[0].input,
+                             dModels[lsFeatureTags[5]].layers[0].input
                              ],
                      outputs=kerDecisionLayer)
 
+#Get the total number of layers to lock
+iLockLayers = len(dModels[lsFeatureTags[0]].layers)\
+              +len(dModels[lsFeatureTags[1]].layers)\
+              +len(dModels[lsFeatureTags[2]].layers)\
+              +len(dModels[lsFeatureTags[3]].layers)\
+              +len(dModels[lsFeatureTags[4]].layers)\
+              +len(dModels[lsFeatureTags[5]].layers)
+
+# Initialize the optimizer
+nadam=ker.optimizers.Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
+
+# Lock the old layers
+for layer in kerModel.layers[:iLockLayers]: layer.trainable = False
+
+# Initialize the early stopping criteria
+kerStopping = ker.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
+
 # Compile the model
-kerModel.compile(optimizer='nadam',
+kerModel.compile(optimizer=nadam,
                  loss='binary_crossentropy',
                  metrics=['accuracy'])
+
+# Fit the model
+history = kerModel.fit([dXData[lsFeatureTags[0]],
+                        dXData['connectivity'][lsFeatureTags[1]],
+                        dXData['connectivity'][lsFeatureTags[2]],
+                        dXData['connectivity'][lsFeatureTags[3]],
+                        dXData['connectivity'][lsFeatureTags[4]],
+                        dXData['connectivity'][lsFeatureTags[5]]
+                        ], aYData, epochs=50, batch_size=128,
+                        callbacks=[kerStopping])
