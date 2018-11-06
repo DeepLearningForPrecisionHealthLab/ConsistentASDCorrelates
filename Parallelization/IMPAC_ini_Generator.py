@@ -11,6 +11,11 @@ import random
 
 np.random.seed(42)
 
+bNewDense=False
+bNewLSTM=False
+bNewBrainNet=False
+bNewStack=True
+
 # Initialize the directories where the ini files will be stored
 def fInitialize():
     # Set up figure saving
@@ -103,7 +108,8 @@ def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
         with open(os.path.join(sTargetDirectory, sIni) + '.ini', 'w') as configfile:
             config.write(configfile)
 
-#fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam)
+if bNewDense:
+    fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam)
 
 ##############################################################################
 # Initialize the ini files for the LSTM Neural network
@@ -184,7 +190,8 @@ def fGenerateLSTMNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
         with open(os.path.join(sTargetDirectory, sIni) + '.ini', 'w') as configfile:
             config.write(configfile)
 
-#fGenerateLSTMNetworkINIs(sTargetDirectory, dHyperParam)
+if bNewLSTM:
+    fGenerateLSTMNetworkINIs(sTargetDirectory, dHyperParam)
 
 
 ##############################################################################
@@ -283,7 +290,102 @@ def fGenerateBrainNetCNNINIs(sTargetDirectory, dHyperParam):  # Input shape?
         with open(os.path.join(sTargetDirectory, sIni) + '.ini', 'w') as configfile:
             config.write(configfile)
 
-fGenerateBrainNetCNNINIs(sTargetDirectory, dHyperParam)
+if bNewBrainNet:
+    fGenerateBrainNetCNNINIs(sTargetDirectory, dHyperParam)
 
 ##########################################################################
+# Initialize the ini files for the Stacked Dense Network
 
+# Create a dictionary of hyperparameters to randomly select from
+
+dHyperParam = {
+    'hidden_layers': [1, 2, 3, 4],
+    'bottom_layer_width': [8, 16, 32, 64, 128],
+    'Dropout': np.random.uniform(0.1, 0.6, 10),
+    'regularization': 10 ** np.random.uniform(-4, -2, 10),
+    'batch_normalization': [True, False]
+}
+
+
+def fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
+    """ Adapted from Alex Treacher's network_functions code by Cooper Mellema
+    Makes semi random config file for a keras network, designed around the IMPAC Autism Project.
+    Creates a 2 class network architecture with a hyperparameter set in the space defined by the
+    dictionary dHyperparameters, which is passed in
+
+    See also cnn_random_n_classifier_builder. (these two functions could easily be combined)
+    :param sTargetDirectory: where to save the file
+    :return: None
+    """
+
+    # Create 50 .ini files
+    for iRandomInitialization in range(50):
+        random.seed(iRandomInitialization)
+        if iRandomInitialization<10:
+            sIni = 'Stack_0' + str(iRandomInitialization)
+        else:
+            sIni = 'Stack_' + str(iRandomInitialization)
+
+        iLayers = random.choice(dHyperParam['hidden_layers'])
+        iBottomLayerWidth = random.choice(dHyperParam['bottom_layer_width'])
+        flDropout = random.choice(dHyperParam['Dropout'])
+        flRegularizer = random.choice(dHyperParam['regularization'])
+        bBatchNormalization = random.choice(dHyperParam['batch_normalization'])
+
+        #Initialize the ini file with ConfigParser
+        config = ConfigParser()
+        config['model'] = {'class': 'Functional', 'loss': 'binary_crossentropy'}
+
+        if bBatchNormalization:
+            config['layer/inputNormalize'] ={'class': 'BatchNormalization',
+                                             'momentum': 0.99,
+                                             'epsilon': 0.0000001
+                                            }
+
+        # Create the input layer
+        config['layer/input'] = {'class': 'Dense',
+                                 'units': str(iBottomLayerWidth),
+                                 'regularizer': str(flRegularizer),
+                                 'activation': 'relu',
+                                 'alpha': str(0.3)
+                                 }
+
+
+        # Create iLayers number of hidden layers with a Dropout layer before each
+        for i in range(iLayers):
+            if bBatchNormalization:
+                config['layer/inputNormalize%i' % (i)] = {'class': 'BatchNormalization',
+                                                          'momentum': 0.99,
+                                                          'epsilon': 0.0000001
+                                                          }
+
+            config['layer/Dropout%i' % (i)] ={'class': 'Dropout',
+                                              'rate': flDropout
+                                              }
+
+            config['layer/Dense%i' % (i)] = {'class': 'Dense',
+                                             'units': int(iBottomLayerWidth/(i+1)),
+                                             'activation': 'relu',
+                                             'regularizer': str(flRegularizer),
+                                             'alpha': str(0.3)
+                                             }
+
+
+        # Create the decision layer
+        config['layer/Dense%i' % (i+1)] = {'class': 'Dense',
+                                           'units': 1,
+                                           'regularizer': str(flRegularizer),
+                                           'activation': 'sigmoid'
+                                           }
+
+        # set the optimizer for the training
+        config['optimizer'] = {'class': 'nadam'}
+
+        # set the batch size
+        config['batch_size'] = {'class': '128'}
+
+        with open(os.path.join(sTargetDirectory, sIni) + '.ini', 'w') as configfile:
+            config.write(configfile)
+
+if bNewStack:
+    fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam)
