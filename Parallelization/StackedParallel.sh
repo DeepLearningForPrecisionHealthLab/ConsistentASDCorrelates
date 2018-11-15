@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#SBATCH --job-name=StackedNet
-#SBATCH --partition=GPUv100
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
+#SBATCH --job-name=StackedNetEarlyChop
+#SBATCH --partition=GPUp100
+#SBATCH --nodes=2
+#SBATCH --ntasks=2
 #SBATCH --time=3-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
 #SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_Stacked.txt"
@@ -14,9 +14,9 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=72
+CORES_PER_TASK=56
 
-INPUTS_COMMAND="ls -v ./IniFiles/S*"
+INPUTS_COMMAND="ls -v ./IniFiles/Stack_*"
 
 TASK_SCRIPT='python script_wrapper_stacked.py'
 

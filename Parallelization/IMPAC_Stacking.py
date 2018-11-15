@@ -43,6 +43,7 @@ import numpy as np
 import keras as ker
 import pandas as pd
 import sklearn as sk
+import tensorflow as tf
 import matplotlib.pyplot as plt
 import os
 import pickle as pkl
@@ -65,6 +66,11 @@ def fGetBestModel(sDataPath, sFeatureName, bTrainable=True):
     :return: the model
     """
 
+    if not sFeatureName=='anatomy':
+        sPerformanceTag='connectivity'+sFeatureName
+    else:
+        sPerformanceTag=sFeatureName
+
     # Initialize a dataframe to store values
     lsModelIndex=[]
     for i in range(50):
@@ -74,9 +80,9 @@ def fGetBestModel(sDataPath, sFeatureName, bTrainable=True):
 
     # Load each cross validation score and store it in a dataframe
     for i in range(50):
-        sCVFile1 = sDataPath + '/Dense_' + str(i) + sFeatureName + 'CrossVal1.p'
-        sCVFile2 = sDataPath + '/Dense_' + str(i) + sFeatureName + 'CrossVal2.p'
-        sCVFile3 = sDataPath + '/Dense_' + str(i) + sFeatureName + 'CrossVal3.p'
+        sCVFile1 = sDataPath + '/Dense_' + str(i) + sPerformanceTag + 'ROCScoreCrossVal1.p'
+        sCVFile2 = sDataPath + '/Dense_' + str(i) + sPerformanceTag + 'ROCScoreCrossVal2.p'
+        sCVFile3 = sDataPath + '/Dense_' + str(i) + sPerformanceTag + 'ROCScoreCrossVal3.p'
         if os.path.isfile(sCVFile1) and os.path.isfile(sCVFile2) and os.path.isfile(sCVFile3):
             flCV1 = pkl.load(open(sCVFile1, 'rb'))
             flCV2 = pkl.load(open(sCVFile2, 'rb'))
@@ -96,6 +102,7 @@ def fGetBestModel(sDataPath, sFeatureName, bTrainable=True):
     pdResults = pdResults.infer_objects()
     lsIndex = pdResults.index
     iBestModel = lsIndex.get_loc(pdResults['Mean Cross Val'].idxmax())
+    print(iBestModel)
 
     # Get '00' for model 0, '01' for model 1, etc. to fetch correct .ini files
     if iBestModel < 10:
@@ -111,6 +118,7 @@ def fGetBestModel(sDataPath, sFeatureName, bTrainable=True):
         kerModel = fReproduceModel('connectivity', sBestModel, sWeightsPath, sSubInputName=sFeatureName)
 
     kerModel.trainable=bTrainable
+
     return kerModel
 
 #institute new stacked architecture from the ini file
@@ -274,7 +282,7 @@ def fStackedCrossValSplit(dXData, aYData, lsFeatureTags):
 
     return dXDataCV, lsYCV, dXVal, lsYVal
 
-def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False):
+def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0):
     """Trains the stacked model
 
     :param dModels: dictionary of the models to be used for stacking
@@ -330,16 +338,17 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False):
             None
 
     # Save each most succesful model into a dictionary
+    sTrainedModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputs'
     for sFeatureTag in lsFeatureTags:
-        dModels[sFeatureTag] = fGetBestModel(sDataPath, sFeatureTag)
+        dModels[sFeatureTag] = fGetBestModel(sTrainedModelPath, sFeatureTag)
 
     # concatenate model here, concatenating only 1 layer below the decision layer
-    kerConcatLayer = ker.layers.concatenate([dModels['anatomy'].layers[-2].output,
-                                             dModels['basc122'].layers[-2].output,
-                                             dModels['craddock_scorr_mean'].layers[-2].output,
-                                             dModels['harvard_oxford_cort_prob_2mm'].layers[-2].output,
-                                             dModels['msdl'].layers[-2].output,
-                                             dModels['power_2011'].layers[-2].output
+    kerConcatLayer = ker.layers.concatenate([ker.layers.Flatten()(dModels['anatomy'].layers[-5].output),
+                                             ker.layers.Flatten()(dModels['basc122'].layers[-5].output),
+                                             ker.layers.Flatten()(dModels['craddock_scorr_mean'].layers[-5].output),
+                                             ker.layers.Flatten()(dModels['harvard_oxford_cort_prob_2mm'].layers[-5].output),
+                                             ker.layers.Flatten()(dModels['msdl'].layers[-5].output),
+                                             ker.layers.Flatten()(dModels['power_2011'].layers[-5].output)
                                              ], axis=-1)
 
     kerDecisionLayer = fStackedNetworkFromConfig(sINIPath, kerConcatLayer, dModels, compiled=False)
@@ -371,7 +380,7 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False):
         layer.trainable = False
 
     # Initialize the early stopping criteria
-    kerStopping = ker.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
+    kerStopping = ker.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=20, restore_best_weights=True)
 
     # Compile the model
     kerModel.compile(optimizer=nadam,
@@ -381,26 +390,30 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False):
     # Fit each of 3 cross-validations
     if not bFitFull:
         dXDataCV, lsYDataCV, dXVal, lsYVal = fStackedCrossValSplit(dXData, aYData, lsFeatureTags)
-        for iCV in range(3): # Do 3x Cross Validation
+        ##for iCV in range(3): # Do 3x Cross Validation
             # Do not fit the model if the model has already been trained
-            if not os.path.isfile(os.path.join(sSavePath, sModel, ('CrossVal'+str(iCV)+'ModelHistory.p'))):
-                History = kerModel.fit(dXDataCV[iCV], lsYDataCV[iCV],
-                                        validation_data=(dXVal[iCV], lsYVal[iCV]),
-                                        epochs=500, batch_size=32,
-                                        callbacks=[kerStopping])
+        if not os.path.isfile(os.path.join(sSavePath, sModel, ('CrossVal'+str(iCV)+'ModelHistory.p'))):
+            History = kerModel.fit(dXDataCV[iCV], lsYDataCV[iCV],
+                                    validation_data=(dXVal[iCV], lsYVal[iCV]),
+                                    epochs=500, batch_size=128,
+                                    callbacks=[kerStopping])
 
-                History=History.history
+            History=History.history
 
-                # Predict on the Validation data
-                aPredicted = kerModel.predict(dXVal[iCV])
+            # Predict on the Validation data
+            aPredicted = kerModel.predict(dXVal[iCV])
 
-                flROCScore = sk.metrics.roc_auc_score(lsYVal[iCV], aPredicted)
+            flROCScore = sk.metrics.roc_auc_score(lsYVal[iCV], aPredicted)
 
-                # Save the model weights and history
-                kerModel.save_weights(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelWeights.h5')), 'wb')
-                pkl.dump(aPredicted, open(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelPredicted.p')), 'wb'))
-                pkl.dump(flROCScore, open(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelROCScore.p')), 'wb'))
-                pkl.dump(History, open(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelHistory.p')), 'wb'))
+            # Save the model weights and history
+            kerModel.save_weights(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelWeights.h5')), 'wb')
+            pkl.dump(aPredicted, open(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelPredicted.p')), 'wb'))
+            pkl.dump(flROCScore, open(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelROCScore.p')), 'wb'))
+            pkl.dump(History, open(os.path.join(sSavePath, (sModel + 'CrossVal'+str(iCV)+'ModelHistory.p')), 'wb'))
+
+            del(kerModel)
+            tf.reset_default_graph()
+            ker.backend.clear_session()
 
     # Fit the FULL model (only the best model after cross validation)
     elif bFitFull:
@@ -412,7 +425,7 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False):
                                         dXData['connectivity'][lsFeatureTags[3]],
                                         dXData['connectivity'][lsFeatureTags[4]],
                                         dXData['connectivity'][lsFeatureTags[5]]
-                                        ], aYData, epochs=500, batch_size=32,
+                                        ], aYData, epochs=500, batch_size=128,
                                         callbacks=[kerStopping])
 
             FullHistory=FullHistory.history
@@ -447,10 +460,11 @@ if '__main__' == __name__:
     sInfo = sys.argv[1]
     sModel = sInfo.split('.')[-2]
     sModel = sModel.split('/')[-1]
+    # sModel='Stack_18'
 
     sINIPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sModel + '.ini'
 
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/Stacked'
+    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/Stacked/EarlyChopped'
 
     lsFeatures = [
         'Anatomical',
@@ -471,4 +485,16 @@ if '__main__' == __name__:
     ]
 
     # Fit the models
-    fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False)
+    bCV0 = False
+    bCV1 = True
+    bCV2 = False
+    bFull = False
+
+    if bCV0:
+        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0)
+    elif bCV1:
+        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=1)
+    elif bCV2:
+        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=2)
+    elif bFull:
+        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=True)
