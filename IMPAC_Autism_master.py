@@ -342,15 +342,22 @@ AgeData = np.resize(AgeData, (len(AgeData),1))
 #now site, sex, and age are ready for being passed into a machine learning model
 
 #Next, we combine it all (append columns ) into an 2D array for each algorithm to work on
-ProcessedData = np.append(NormAnatData, SiteData, axis=1)
-ProcessedData = np.append(ProcessedData, AgeData, axis=1)
-ProcessedData = np.append(ProcessedData, SexData, axis=1)
+ProcessedData=NormAnatData
+# ProcessedData = np.append(NormAnatData, SiteData, axis=1)
+# ProcessedData = np.append(ProcessedData, AgeData, axis=1)
+# ProcessedData = np.append(ProcessedData, SexData, axis=1)
+aConfounders=np.append(SiteData, AgeData, axis=1)
+aConfounders=np.append(aConfounders, SexData, axis=1)
+#fill NAN locations with 0's
+NANloc = np.isnan(aConfounders)
+aConfounders[NANloc] = 0
+
 #fill NAN locations with 0's
 NANloc = np.isnan(ProcessedData)
 ProcessedData[NANloc] = 0
 ProcessedTruth = AnatLabels
 
-xData, xTest, yData, yTest = train_test_split(ProcessedData, ProcessedTruth, test_size=0.2)
+#xData, xTest, yData, yTest = train_test_split(ProcessedData, ProcessedTruth, test_size=0.2)
 
 def fRunAnalysis(xData, xTest, yData, yTest, sTargetDirectory):
     # Running the analyses and saving in a table, which is then all saved in the TargetDirectory

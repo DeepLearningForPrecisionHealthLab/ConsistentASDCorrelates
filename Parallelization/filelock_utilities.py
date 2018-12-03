@@ -118,7 +118,12 @@ def fPadZeros(sNuc):
     :param sNum: numerical string
     :return: numerical string padded with preceding zeros to a len of 3
     """
-    while len(sNuc)<11:
+    if "C" in sNuc:
+        iTargetLen=11
+    else:
+        iTargetLen=10
+
+    while len(sNuc)<iTargetLen:
         sNuc=sNuc[0:8]+'0'+sNuc[8:]
     return sNuc
 

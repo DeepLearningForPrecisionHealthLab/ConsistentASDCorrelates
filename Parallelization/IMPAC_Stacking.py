@@ -55,6 +55,10 @@ from Parallelization.IMPAC_DenseNetwork import read_config_file, format_dict,\
 
 np.random.seed(42)
 
+# config = tf.ConfigProto()
+# session = tf.Session(config=config)
+# config.gpu_options.allow_growth = True
+
 # Function to return the best fitting model for a given featureset
 def fGetBestModel(sDataPath, sFeatureName, bTrainable=True):
     """ Fetches the highest ROC AUC models in the IMPAC study for use in a stacking model
@@ -142,6 +146,7 @@ def fStackedNetworkFromConfig(ini_path, kerConcatLayer, dModels, aInputShape=Non
     #make sure the first layer is an input
     layers = [s for s in config.sections() if s.startswith('layer/')]
     strAPI = config['model']['class'].lower()
+    sRegularizer=config['model']['regularization'].lower()
 
     #Initiate the model with the input layer
     if strAPI=='sequential':
@@ -155,8 +160,19 @@ def fStackedNetworkFromConfig(ini_path, kerConcatLayer, dModels, aInputShape=Non
         input_config.pop('class')
         format_dict(input_config)
         if input_class=='Dense':
-            kerInputDenseLayer = ker.layers.Dense(input_config['units'])(kerConcatLayer)
-            kerLayers = ker.layers.advanced_activations.LeakyReLU(alpha=input_config['alpha'])(kerInputDenseLayer)
+            if sRegularizer == 'l1':
+                kerFirstLayer = ker.layers.Dense(input_config['units'], kernel_regularizer=ker.layers.regularizers.l1(
+                    input_config['l1']))(kerConcatLayer)
+            elif sRegularizer == 'l2':
+                kerFirstLayer = ker.layers.Dense(input_config['units'], kernel_regularizer=ker.layers.regularizers.l2(
+                    input_config['l2']))(kerConcatLayer)
+            elif sRegularizer == 'l1_l2':
+                kerFirstLayer = ker.layers.Dense(input_config['units'],
+                                                 kernel_regularizer=ker.layers.regularizers.l1_l2(input_config['l1'],
+                                                                                                  input_config['l2']))(kerConcatLayer)
+
+            kerLayers = ker.layers.advanced_activations.LeakyReLU(alpha=input_config['alpha'])(kerFirstLayer)
+
         elif input_class=='BatchNormalization':
             kerLayers = ker.layers.BatchNormalization(momentum=input_config['momentum'],
                                                       epsilon=input_config['epsilon'])(kerConcatLayer)
@@ -172,14 +188,46 @@ def fStackedNetworkFromConfig(ini_path, kerConcatLayer, dModels, aInputShape=Non
         format_dict(input_config)
         if not intI + 1 == layers.__len__(): #last layer
             if input_class == 'Dense':
-                kerLayers = ker.layers.Dense(input_config['units'])(kerLayers)
+                if sRegularizer == 'l1':
+                    kerLayers = ker.layers.Dense(input_config['units'],
+                                                     kernel_regularizer=ker.layers.regularizers.l1(
+                                                         input_config['l1']))(kerLayers)
+                elif sRegularizer == 'l2':
+                    kerLayers = ker.layers.Dense(input_config['units'],
+                                                     kernel_regularizer=ker.layers.regularizers.l2(
+                                                         input_config['l2']))(kerLayers)
+                elif sRegularizer == 'l1_l2':
+                    kerLayers = ker.layers.Dense(input_config['units'],
+                                                     kernel_regularizer=ker.layers.regularizers.l1_l2(
+                                                         input_config['l1'],
+                                                         input_config['l2']))(kerLayers)
+
                 kerLayers = ker.layers.advanced_activations.LeakyReLU(alpha=input_config['alpha'])(kerLayers)
+
+
             elif input_class == 'Dropout':
                 kerLayers = ker.layers.Dropout(input_config['rate'])(kerLayers)
             elif input_class == 'BatchNormalization':
                 kerLayers = ker.layers.BatchNormalization(momentum=input_config['momentum'], epsilon=input_config['epsilon'])(kerLayers)
+
         if intI + 1 == layers.__len__(): #last layer
-            kerLayers = ker.layers.Dense(1, activation='sigmoid')(kerLayers)
+
+            if input_class == 'Dense':
+                if sRegularizer == 'l1':
+                    kerLayers = ker.layers.Dense(1, activation='sigmoid',
+                                                     kernel_regularizer=ker.layers.regularizers.l1(
+                                                         input_config['l1']))(kerLayers)
+                elif sRegularizer == 'l2':
+                    kerLayers = ker.layers.Dense(1, activation='sigmoid',
+                                                     kernel_regularizer=ker.layers.regularizers.l2(
+                                                         input_config['l2']))(kerLayers)
+                elif sRegularizer == 'l1_l2':
+                    kerLayers = ker.layers.Dense(1, activation='sigmoid',
+                                                     kernel_regularizer=ker.layers.regularizers.l1_l2(
+                                                         input_config['l1'],
+                                                         input_config['l2']))(kerLayers)
+
+
 
 
     #compile if compiled==True.
@@ -282,13 +330,15 @@ def fStackedCrossValSplit(dXData, aYData, lsFeatureTags):
 
     return dXDataCV, lsYCV, dXVal, lsYVal
 
-def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0):
+def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0, bRetrain=False, iLayersOffTop=3):
     """Trains the stacked model
 
     :param dModels: dictionary of the models to be used for stacking
     :param sINIPath:
     :param sSavePath: the full path where the models are to be saved
     :param bFitFull: False if doing cross validation, True if fitting using all data
+    :param bRetrain: True if model is fitted, all weights are unlocked, and then model is tuned
+    :param iLayersOffTop: number of layers to remove from pre-trained networks before concatenation
     :return: NA, but saves the history and weights (to sSavePath)
     """
 
@@ -338,17 +388,17 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0):
             None
 
     # Save each most succesful model into a dictionary
-    sTrainedModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputs'
+    sTrainedModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputsConfoundsIncluded'
     for sFeatureTag in lsFeatureTags:
         dModels[sFeatureTag] = fGetBestModel(sTrainedModelPath, sFeatureTag)
 
     # concatenate model here, concatenating only 1 layer below the decision layer
-    kerConcatLayer = ker.layers.concatenate([ker.layers.Flatten()(dModels['anatomy'].layers[-5].output),
-                                             ker.layers.Flatten()(dModels['basc122'].layers[-5].output),
-                                             ker.layers.Flatten()(dModels['craddock_scorr_mean'].layers[-5].output),
-                                             ker.layers.Flatten()(dModels['harvard_oxford_cort_prob_2mm'].layers[-5].output),
-                                             ker.layers.Flatten()(dModels['msdl'].layers[-5].output),
-                                             ker.layers.Flatten()(dModels['power_2011'].layers[-5].output)
+    kerConcatLayer = ker.layers.concatenate([ker.layers.Flatten()(dModels['anatomy'].layers[-iLayersOffTop].output),
+                                             ker.layers.Flatten()(dModels['basc122'].layers[-iLayersOffTop].output),
+                                             ker.layers.Flatten()(dModels['craddock_scorr_mean'].layers[-iLayersOffTop].output),
+                                             ker.layers.Flatten()(dModels['harvard_oxford_cort_prob_2mm'].layers[-iLayersOffTop].output),
+                                             ker.layers.Flatten()(dModels['msdl'].layers[-iLayersOffTop].output),
+                                             ker.layers.Flatten()(dModels['power_2011'].layers[-iLayersOffTop].output)
                                              ], axis=-1)
 
     kerDecisionLayer = fStackedNetworkFromConfig(sINIPath, kerConcatLayer, dModels, compiled=False)
@@ -365,12 +415,12 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0):
                          outputs=kerDecisionLayer.output)
 
     #Get the total number of layers to lock
-    iLockLayers = len(dModels[lsFeatureTags[0]].layers)\
-                  +len(dModels[lsFeatureTags[1]].layers)\
-                  +len(dModels[lsFeatureTags[2]].layers)\
-                  +len(dModels[lsFeatureTags[3]].layers)\
-                  +len(dModels[lsFeatureTags[4]].layers)\
-                  +len(dModels[lsFeatureTags[5]].layers)
+    iLockLayers = len(dModels[lsFeatureTags[0]].layers)-iLayersOffTop\
+                  +len(dModels[lsFeatureTags[1]].layers)-iLayersOffTop\
+                  +len(dModels[lsFeatureTags[2]].layers)-iLayersOffTop\
+                  +len(dModels[lsFeatureTags[3]].layers)-iLayersOffTop\
+                  +len(dModels[lsFeatureTags[4]].layers)-iLayersOffTop\
+                  +len(dModels[lsFeatureTags[5]].layers)-iLayersOffTop
 
     # Initialize the optimizer
     nadam=ker.optimizers.Nadam(lr=0.002, beta_1=0.9, beta_2=0.999, epsilon=None, schedule_decay=0.004)
@@ -380,7 +430,7 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0):
         layer.trainable = False
 
     # Initialize the early stopping criteria
-    kerStopping = ker.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=20, restore_best_weights=True)
+    kerStopping = ker.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=50, restore_best_weights=True)
 
     # Compile the model
     kerModel.compile(optimizer=nadam,
@@ -398,7 +448,34 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0):
                                     epochs=500, batch_size=128,
                                     callbacks=[kerStopping])
 
-            History=History.history
+            History = History.history
+
+            # Unlock the layers
+            if bRetrain==True:
+                for layer in kerModel.layers[:iLockLayers]:
+                    layer.trainable = True
+                    kerModel.compile(optimizer=nadam,
+                                     loss='binary_crossentropy',
+                                     metrics=['accuracy'])
+
+                # Before retraining, save where the model is currently
+                # Predict on the Validation data
+                aPredicted = kerModel.predict(dXVal[iCV])
+
+                flROCScore = sk.metrics.roc_auc_score(lsYVal[iCV], aPredicted)
+
+                kerModel.save_weights(os.path.join(sSavePath, (sModel + 'PreRetrainCrossVal' + str(iCV) + 'ModelWeights.h5')),'wb')
+                pkl.dump(aPredicted, open(os.path.join(sSavePath, (sModel + 'PreRetrainCrossVal' + str(iCV) + 'ModelPredicted.p')), 'wb'))
+                pkl.dump(flROCScore, open(os.path.join(sSavePath, (sModel + 'PreRetrainCrossVal' + str(iCV) + 'ModelROCScore.p')), 'wb'))
+                pkl.dump(History, open(os.path.join(sSavePath, (sModel + 'PreRetrainCrossVal' + str(iCV) + 'ModelHistory.p')), 'wb'))
+
+                # Refit the model
+                History = kerModel.fit(dXDataCV[iCV], lsYDataCV[iCV],
+                                        validation_data=(dXVal[iCV], lsYVal[iCV]),
+                                        epochs=500, batch_size=128,
+                                        callbacks=[kerStopping])
+
+                History=History.history
 
             # Predict on the Validation data
             aPredicted = kerModel.predict(dXVal[iCV])
@@ -452,49 +529,77 @@ def fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0):
 if '__main__' == __name__:
 
     # Initialize the paths used
-    sModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputs'
+    sModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputsConfoundsIncluded'
 
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
 
     # Fetch the name of the input features and model architecture number from the parallel wrapper
-    sInfo = sys.argv[1]
-    sModel = sInfo.split('.')[-2]
-    sModel = sModel.split('/')[-1]
-    # sModel='Stack_18'
+    # if no name is passed to the function, it is being tested and will try architecture 1
+    if not len(sys.argv)==1:
+        sInfo = sys.argv[1]
+        sModel = sInfo.split('.')[-2]
+        sModel = sModel.split('/')[-1]
+    else:
+        sModel = 'Stack_00'
 
-    sINIPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sModel + '.ini'
+    dModelConditions={1: 'LessLockingEarlyChoppingConfoundsIncluded',
+                      2: 'LessLockingConfoundsIncluded',
+                      3: 'LessLockingEarlyChoppingRetrainingAllowedConfoundsIncluded',
+                      4: 'LessLockingRetrainingAllowedConfoundsIncluded'
+                     }
 
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/Stacked/EarlyChopped'
+    for keys in dModelConditions:
 
-    lsFeatures = [
-        'Anatomical',
-        'BASC 122 ROI',
-        'Craddock 449 ROI',
-        'Harvard-Oxford 69 ROI',
-        'MSDL 39 ROI',
-        'Power 264 ROI'
-    ]
+        sModelCondition=dModelConditions[keys]
 
-    lsFeatureTags = [
-        'anatomy',
-        'basc122',
-        'craddock_scorr_mean',
-        'harvard_oxford_cort_prob_2mm',
-        'msdl',
-        'power_2011'
-    ]
+        sINIPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles' \
+                   '/StackedWithRegularization/' + sModel + '.ini'
 
-    # Fit the models
-    bCV0 = False
-    bCV1 = True
-    bCV2 = False
-    bFull = False
+        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/Stacked' \
+                    '/RegularizationIncluded/' + sModelCondition
 
-    if bCV0:
-        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0)
-    elif bCV1:
-        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=1)
-    elif bCV2:
-        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=2)
-    elif bFull:
-        fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=True)
+        if not os.path.isdir(sSavePath):
+            os.makedirs(sSavePath)
+
+        lsFeatures = [
+            'Anatomical',
+            'BASC 122 ROI',
+            'Craddock 449 ROI',
+            'Harvard-Oxford 69 ROI',
+            'MSDL 39 ROI',
+            'Power 264 ROI'
+        ]
+
+        lsFeatureTags = [
+            'anatomy',
+            'basc122',
+            'craddock_scorr_mean',
+            'harvard_oxford_cort_prob_2mm',
+            'msdl',
+            'power_2011'
+        ]
+
+        # Fit the models
+        bCV0 = True
+        bCV1 = True
+        bCV2 = True
+        bFull = True
+
+        if "Retrain" in sModelCondition:
+            bRetrain=True
+        else:
+            bRetrain=False
+
+        if "Early" in sModelCondition:
+            iLayersOffTop=6
+        else:
+            iLayersOffTop=3
+
+        if bCV2:
+            fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=2, bRetrain=bRetrain, iLayersOffTop=iLayersOffTop)
+        if bCV1:
+            fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=1, bRetrain=bRetrain, iLayersOffTop=iLayersOffTop)
+        if bCV0:
+            fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=False, iCV=0, bRetrain=bRetrain, iLayersOffTop=iLayersOffTop)
+        if bFull:
+            fRunStacked(sDataPath, sINIPath, sSavePath, sModel, bFitFull=True, bRetrain=bRetrain, iLayersOffTop=iLayersOffTop)

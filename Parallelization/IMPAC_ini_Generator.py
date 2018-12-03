@@ -22,7 +22,7 @@ def fInitialize():
     sProjectRootDirectory = "/project/bioinformatics/DLLab/Cooper/Code"
     sProjectIdentification = "AutismProject/Parallelization"
 
-    sTargetDirectory = os.path.join(sProjectRootDirectory, sProjectIdentification, 'IniFiles')
+    sTargetDirectory = os.path.join(sProjectRootDirectory, sProjectIdentification, 'IniFiles/StackedWithRegularization')
 
     if not os.path.exists(sTargetDirectory):
         os.makedirs(sTargetDirectory)
@@ -81,11 +81,11 @@ def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
 
         # Create iLayers number of hidden layers with a Dropout layer before each
         for i in range(iLayers):
-            config['layer/Dropout%i' % (i)] ={'class': 'Dropout',
+            config['layer/Dropout{}'.format(i)] ={'class': 'Dropout',
                                               'rate': flDropout
                                               }
 
-            config['layer/Dense%i' % (i)] = {'class': 'Dense',
+            config['layer/Dense{}'.format(i)] = {'class': 'Dense',
                                              'units': int(iBottomLayerWidth/(i+1)),
                                              'activation': 'relu',
                                              'regularizer': str(flRegularizer),
@@ -93,7 +93,7 @@ def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
                                              }
 
         # Create the decision layer
-        config['layer/Dense%i' % (i+1)] = {'class': 'Dense',
+        config['layer/Dense{}'.format(i+1)] = {'class': 'Dense',
                                            'units': 1,
                                            'regularizer': str(flRegularizer),
                                            'activation': 'sigmoid'
@@ -161,11 +161,11 @@ def fGenerateLSTMNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
 
         # Create iLayers number of hidden layers with a Dropout layer before each
         for i in range(iLayers):
-            config['layer/Dropout%i' % (i)] ={'class': 'Dropout',
+            config['layer/Dropout{}'.format(i)] ={'class': 'Dropout',
                                               'rate': flDropout
                                               }
 
-            config['layer/LSTM%i' % (i)] = {'class': 'LSTM',
+            config['layer/LSTM{}'.format(i)] = {'class': 'LSTM',
                                             'units': int(iBottomLayerWidth/(i+1)),
                                             #'gradient_clipping': str(flGradientClipping),
                                             'regularizer': str(flRegularizer),
@@ -175,7 +175,7 @@ def fGenerateLSTMNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
                                             }
 
         # Create the decision layer
-        config['layer/Dense%i' % (i+1)] = {'class': 'Dense',
+        config['layer/Dense{}'.format(i+1)] = {'class': 'Dense',
                                            'units': 1,
                                            'regularizer': str(flRegularizer),
                                            'activation': 'sigmoid'
@@ -240,15 +240,15 @@ def fGenerateBrainNetCNNINIs(sTargetDirectory, dHyperParam):  # Input shape?
         # Create iLayers number of hidden layers with a Dropout layer after each
         for i in range(iLayers):
 
-            config['layer/edge2edge%i' % (i+1)] = {'class': 'e2e',
+            config['layer/edge2edge{}'.format(i+1)] = {'class': 'e2e',
                                                    'n_filters': int(iBottomLayerWidth), #/somthing?
                                                    }
 
-            # config['layer/Dropout%i' % (i+1)] = {'class': 'dropout',
+            # config['layer/Dropout{}'.format(i+1)] = {'class': 'dropout',
             #                                      'dropout_ratio': str(flDropout)
             #                                      }
             #
-            # config['layer/Activation%i' % (i+1)] = {'class': 'activation',
+            # config['layer/Activation{}'.format(i+1)] = {'class': 'activation',
             #                                         'activation': 'relu',
             #                                         'negative_slope': str(flReluSlope)
             #                                         }
@@ -299,13 +299,14 @@ if bNewBrainNet:
 # Create a dictionary of hyperparameters to randomly select from
 
 dHyperParam = {
+    'regularization': ['l1', 'l2', 'l1_l2'],
     'hidden_layers': [1, 2, 3, 4],
     'bottom_layer_width': [8, 16, 32, 64, 128],
     'Dropout': np.random.uniform(0.1, 0.6, 10),
-    'regularization': 10 ** np.random.uniform(-4, -2, 10),
+    'l1': 10 ** np.random.uniform(-4, -2, 10),
+    'l2': 10 ** np.random.uniform(-4, -2, 10),
     'batch_normalization': [True, False]
 }
-
 
 def fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
     """ Adapted from Alex Treacher's network_functions code by Cooper Mellema
@@ -329,12 +330,14 @@ def fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
         iLayers = random.choice(dHyperParam['hidden_layers'])
         iBottomLayerWidth = random.choice(dHyperParam['bottom_layer_width'])
         flDropout = random.choice(dHyperParam['Dropout'])
-        flRegularizer = random.choice(dHyperParam['regularization'])
+        flL1 = random.choice(dHyperParam['l1'])
+        flL2 = random.choice(dHyperParam['l2'])
         bBatchNormalization = random.choice(dHyperParam['batch_normalization'])
 
         #Initialize the ini file with ConfigParser
         config = ConfigParser()
-        config['model'] = {'class': 'Functional', 'loss': 'binary_crossentropy'}
+        config['model'] = {'class': 'Functional', 'loss': 'binary_crossentropy', 'regularization':
+            np.random.choice(dHyperParam['regularization'])}
 
         if bBatchNormalization:
             config['layer/inputNormalize'] ={'class': 'BatchNormalization',
@@ -345,39 +348,60 @@ def fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
         # Create the input layer
         config['layer/input'] = {'class': 'Dense',
                                  'units': str(iBottomLayerWidth),
-                                 'regularizer': str(flRegularizer),
+                                 'l1': str(flL1),
+                                 'l2': str(flL2),
                                  'activation': 'relu',
                                  'alpha': str(0.3)
                                  }
 
+        # if there is no l1 regularization, get rid of the l1 param, and same for l2
+        if config['model']['regularization']=='l1':
+            config['layer/input'].pop('l2')
+        elif config['model']['regularization']=='l2':
+            config['layer/input'].pop('l1')
 
         # Create iLayers number of hidden layers with a Dropout layer before each
         for i in range(iLayers):
             if bBatchNormalization:
-                config['layer/inputNormalize%i' % (i)] = {'class': 'BatchNormalization',
+                config['layer/inputNormalize{}'.format(i)] = {'class': 'BatchNormalization',
                                                           'momentum': 0.99,
                                                           'epsilon': 0.0000001
                                                           }
 
-            config['layer/Dropout%i' % (i)] ={'class': 'Dropout',
+            config['layer/Dropout{}'.format(i)] ={'class': 'Dropout',
                                               'rate': flDropout
                                               }
 
-            config['layer/Dense%i' % (i)] = {'class': 'Dense',
+            config['layer/Dense{}'.format(i)] = {'class': 'Dense',
                                              'units': int(iBottomLayerWidth/(i+1)),
                                              'activation': 'relu',
-                                             'regularizer': str(flRegularizer),
+                                             'l1': str(flL1),
+                                             'l2': str(flL2),
+                                             'activation': 'relu',
                                              'alpha': str(0.3)
                                              }
 
+            # if there is no l1 regularization, get rid of the l1 param, and same for l2
+            if config['model']['regularization'] == 'l1':
+                config['layer/Dense{}'.format(i)].pop('l2')
+            elif config['model']['regularization'] == 'l2':
+                config['layer/Dense{}'.format(i)].pop('l1')
+
 
         # Create the decision layer
-        config['layer/Dense%i' % (i+1)] = {'class': 'Dense',
+        config['layer/Dense{}'.format(i+1)] = {'class': 'Dense',
                                            'units': 1,
-                                           'regularizer': str(flRegularizer),
-                                           'activation': 'sigmoid'
+                                           'l1': str(flL1),
+                                           'l2': str(flL2),
+                                           'activation': 'sigmoid',
+                                           'alpha': str(0.3)
                                            }
 
+        # if there is no l1 regularization, get rid of the l1 param, and same for l2
+        if config['model']['regularization'] == 'l1':
+            config['layer/Dense{}'.format(i+1)].pop('l2')
+        elif config['model']['regularization'] == 'l2':
+            config['layer/Dense{}'.format(i+1)].pop('l1')
         # set the optimizer for the training
         config['optimizer'] = {'class': 'nadam'}
 
@@ -387,5 +411,7 @@ def fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
         with open(os.path.join(sTargetDirectory, sIni) + '.ini', 'w') as configfile:
             config.write(configfile)
 
+
+
 if bNewStack:
-    fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam)
+    config=fGenerateStackNetworkINIs(sTargetDirectory, dHyperParam)

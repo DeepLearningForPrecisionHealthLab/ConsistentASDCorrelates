@@ -513,11 +513,16 @@ def fPreprocess():
 
     aSiteData = pdParticipantsData.participants_site.values
     aSexData = pdParticipantsData.participants_sex.values
+    aAgeData = np.float32(pdParticipantsData.participants_age.values)
 
     aSiteData = keras.utils.to_categorical(aSiteData)
     aSexData = keras.utils.to_categorical(aSexData == 'F')
     aSexData = np.resize(aSexData, (len(aSexData), 1))
-    # now site and gender are ready for being passed into a machine learning model
+    aAgeData = np.resize(aAgeData, (len(aSexData), 1))
+    # now site, gender, and age are ready for being passed into a machine learning model
+
+    aConfounders = np.append(aSiteData, aSexData, axis=1)
+    aConfounders = np.append(aConfounders, aAgeData, axis=1)
 
     # the sMRI data is converted from a pandas dataframe to a numpy matrix
     aSMRIData = pdSMRIData.values
@@ -526,12 +531,15 @@ def fPreprocess():
     aSMRIData = sk.preprocessing.normalize(aSMRIData)
 
     # Next, we combine it all (append columns ) into an 2D array for each algorithm to work on
-    aProcessedSMRIData = np.append(aSMRIData, aSiteData, axis=1)
-    aProcessedSMRIData = np.append(aProcessedSMRIData, aSexData, axis=1)
+    # aProcessedSMRIData = np.append(aSMRIData, aSiteData, axis=1)
+    # aProcessedSMRIData = np.append(aProcessedSMRIData, aSexData, axis=1)
+    aProcessedSMRIData=aSMRIData
 
     # fill NAN locations with 0's
     aNANloc = np.isnan(aProcessedSMRIData)
     aProcessedSMRIData[aNANloc] = 0
+    aNANloc = np.isnan(aConfounders)
+    aConfounders[aNANloc] = 0
 
     # now, aProcesedSMRIData is ready to be split into test, training, and validation sets
 
@@ -608,45 +616,46 @@ def fPreprocess():
 
     return dXTrain, dXTest, aYTrain, aYTest
 
+if __name__ == '__main__':
 
-# Get the Training and Test Data with fPreprocess (see fPreprocess comments for
-# details)
-if not os.path.isfile(os.path.join(sProjectRootDirectory, sProjectIdentification, 'TrainTestData.p')):
-    dXTrain, dXTest, aYTrain, aYTest = fPreprocess()
-    pickle.dump([dXTrain, dXTest, aYTrain, aYTest],
-                open(os.path.join(sProjectRootDirectory, sProjectIdentification, 'TrainTestData.p'), 'wb'))
+    # Get the Training and Test Data with fPreprocess (see fPreprocess comments for
+    # details)
+    if not os.path.isfile(os.path.join(sProjectRootDirectory, sProjectIdentification, 'TrainTestData.p')):
+        dXTrain, dXTest, aYTrain, aYTest = fPreprocess()
+        pickle.dump([dXTrain, dXTest, aYTrain, aYTest],
+                    open(os.path.join(sProjectRootDirectory, sProjectIdentification, 'TrainTestData.p'), 'wb'))
 
-else:
-    [dXTrain, dXTest, aYTrain, aYTest] = pickle.load(open(os.path.join(sProjectRootDirectory,
-                                                                       sProjectIdentification, 'TrainTestData.p'), 'rb'))
-
-# Create a directory to store results in- flagged with the day it was run
-# named by parameters for random search with
-# internal folders named for the data being used
-sTargetDirectory = "3_fold_cv_3_random_hyperparameter_initializations_random_search" + datetime.date.today().strftime('%m''%d')
-
-# Import the pre-trained models from this location (if they exist). If not, set to 'None'
-sPreSavedDirectory = "A"
-
-# Run the analysis on the anatomical data alone and then save the results in a sub-folder to
-# sTarget Directory
-sRunTag = 'anatomical_only'
-fRunAnalysis(dXTrain['anatomy'], dXTest['anatomy'], aYTrain, aYTest, sTargetDirectory, sPreSavedDirectory, sRunTag)
-
-# Loops through all combinations of:
-#   fMRI connectivity data alone used as Training and Test Data
-#   fMRI connectivity data combined with structural data used as Training and Test Data
-#
-#   and then loops through each atlas used to generate the fMRI connectivity data matrices
-
-for sCategory in dXTrain.keys():
-    if sCategory != 'anatomy':
-        for sAtlas in dXTrain[sCategory].keys():
-            sRunTag = sCategory + '_' + sAtlas
-            fRunAnalysis(dXTrain[sCategory][sAtlas], dXTest[sCategory][sAtlas], aYTrain, aYTest,
-                         sTargetDirectory, sPreSavedDirectory, sRunTag)
     else:
-        fRunAnalysis(dXTrain[sCategory], dXTest[sCategory], aYTrain, aYTest,
-                     sTargetDirectory, sPreSavedDirectory, sRunTag)
+        [dXTrain, dXTest, aYTrain, aYTest] = pickle.load(open(os.path.join(sProjectRootDirectory,
+                                                                           sProjectIdentification, 'TrainTestData.p'), 'rb'))
+
+    # Create a directory to store results in- flagged with the day it was run
+    # named by parameters for random search with
+    # internal folders named for the data being used
+    sTargetDirectory = "3_fold_cv_3_random_hyperparameter_initializations_random_search" + datetime.date.today().strftime('%m''%d')
+
+    # Import the pre-trained models from this location (if they exist). If not, set to 'None'
+    sPreSavedDirectory = "A"
+
+    # Run the analysis on the anatomical data alone and then save the results in a sub-folder to
+    # sTarget Directory
+    sRunTag = 'anatomical_only'
+    fRunAnalysis(dXTrain['anatomy'], dXTest['anatomy'], aYTrain, aYTest, sTargetDirectory, sPreSavedDirectory, sRunTag)
+
+    # Loops through all combinations of:
+    #   fMRI connectivity data alone used as Training and Test Data
+    #   fMRI connectivity data combined with structural data used as Training and Test Data
+    #
+    #   and then loops through each atlas used to generate the fMRI connectivity data matrices
+
+    for sCategory in dXTrain.keys():
+        if sCategory != 'anatomy':
+            for sAtlas in dXTrain[sCategory].keys():
+                sRunTag = sCategory + '_' + sAtlas
+                fRunAnalysis(dXTrain[sCategory][sAtlas], dXTest[sCategory][sAtlas], aYTrain, aYTest,
+                             sTargetDirectory, sPreSavedDirectory, sRunTag)
+        else:
+            fRunAnalysis(dXTrain[sCategory], dXTest[sCategory], aYTrain, aYTest,
+                         sTargetDirectory, sPreSavedDirectory, sRunTag)
 
 

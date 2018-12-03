@@ -215,13 +215,16 @@ def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEar
     # Initialize variables
     sIni = 'Dense_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputs'
+    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputsConfoundsIncluded'
+
+    if not os.path.isdir(sSavePath):
+        os.makedirs(sSavePath, exist_ok=True)
 
     if b2Atlas==True:
         sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData2Atlas.p'
         sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2Atlases'
     else:
-        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
 
     # Load the master file of the data pre-organized into train, test
     [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
@@ -359,7 +362,7 @@ def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName='', b2Atl
     if b2Atlas==True:
         sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData2Atlas.p'
     else:
-        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
 
     # Load the data which was used to train the model
     # required for generating correct input size
@@ -415,8 +418,8 @@ def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName='', b2Atl
 
 if '__main__' == __name__:
     # Load the data
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
-    [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
+    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
+    [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
 
     # Fetch the name of the input features and model architecture number from the parallel wrapper
     sInfo=sys.argv[1]
@@ -426,6 +429,8 @@ if '__main__' == __name__:
     sInputName=sInputName.split('/')[-1]
     sInputName=sInputName.split(',')[0]
 
+    bCombined=False
+
     # Train the networks
     if not sInputName =='Dense_':
         fRunDenseNetOnInput(sInputName, sModel, sSubInputName='2Atlas', iEpochs=500, b2Atlas=True)
@@ -433,5 +438,6 @@ if '__main__' == __name__:
         fRunDenseNetOnInput('anatomy', sModel, iEpochs=500)
         for keys in dXData['connectivity']:
            fRunDenseNetOnInput('connectivity', sModel, sSubInputName=keys, iEpochs=500)
-        for keys in dXData['combined']:
-            fRunDenseNetOnInput('combined', sModel, sSubInputName=keys, iEpochs=500)
+        if bCombined:
+            for keys in dXData['combined']:
+                fRunDenseNetOnInput('combined', sModel, sSubInputName=keys, iEpochs=500)
