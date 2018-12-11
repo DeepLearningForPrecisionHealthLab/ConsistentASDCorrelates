@@ -454,8 +454,8 @@ for i in range(len(fMRIAtlases)):
 # This function was included in the IMPAC autism starting set, I altered it to grab the data from the correct folder
 def _load_fmri(fmri_filenames):
     """Load time-series extracted from the fMRI using a specific atlas."""
-    return np.array([pd.read_csv(os.path.join('/project/bioinformatics/DLLab/shared/Autism_IMPAC/autism-master', subject_filename),
-                                 header=None).values
+    return np.array([pd.read_csv(os.path.join('/project/bioinformatics/DLLab/shared/Autism_IMPAC/autism-master',
+                                              subject_filename), header=None).values
                      for subject_filename in fmri_filenames])
 
 # This class was included in the IMPAC autism starting set
