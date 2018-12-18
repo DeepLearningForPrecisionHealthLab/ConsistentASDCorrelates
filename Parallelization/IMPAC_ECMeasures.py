@@ -127,11 +127,11 @@ def fFetchRawFMRIData(bQualityAssurance=True):
         pdFMRIData = pdFMRIData.drop('fmri_select', axis=1)  # discard the QA column since not used for ML fitting
         pdFMRIData = pdFMRIData.drop('fmri_motions', axis=1)  # discard the motion QA column as well
 
-        return pdFMRIData, aRawLabels
+        return pdFMRIData
 
     else:
         pdFMRIData = pdRawData[[col for col in pdRawData.columns if col.startswith('fmri')]]
-        return pdFMRIData, aRawLabels
+        return pdFMRIData
 
 def fFetchFMRIFileNames(pdFMRIData):
     """ Fetches the names of the FMRI atlases and returns them
@@ -152,7 +152,7 @@ def _load_fmri(fmri_filenames):
     return np.array([pd.read_csv(os.path.join('/project/bioinformatics/DLLab/shared/Autism_IMPAC/autism-master',
                     subject_filename), header=None).values for subject_filename in fmri_filenames])
 
-def fFetchFMRIData(sFileName, lsFMRIAtlases, pdFMRIData, pdFMRILabels, **ConnectArgOptions):
+def fFetchFMRIData(sFileName, lsFMRIAtlases, pdFMRIData, **ConnectArgOptions):
     """Imports the timeseries per atlas
     if a pickled set of the Connectivity data is available, it loads it,
     otherwise, it calculates the connectivity for every atlas, saves them all
@@ -183,9 +183,9 @@ if __name__ == '__main__':
     with each key being an atlas, and each element being an np array
     of the timeseries of each ROI in that atlas
     """
-    pdFMRIData, aFMRILabels = fFetchRawFMRIData()
-    lsFMRIAtlases = fFetchFMRIFileNames(pdFMRIData)
-    dTimeSeriesByAtlas = fFetchFMRIData('ROITimeseries', lsFMRIAtlases, pdFMRIData, aFMRILabels)
+    pdFMRIData = fFetchRawFMRIData()
+    lsFMRIFileNames = fFetchFMRIFileNames(pdFMRIData)
+    dTimeSeriesByAtlas = fFetchFMRIData('ROITimeseries', lsFMRIFileNames, pdFMRIData)
 
     # The dictionary is formatted as follows:
     # dTimeSeriesByAtlas{Atlas Name: [pt number(0 to 915)] [timepoint, roi number]}
