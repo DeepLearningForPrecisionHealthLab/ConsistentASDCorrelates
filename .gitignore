@@ -22,4 +22,16 @@ TrainTestData.p
 /Parallelization/snapshot/
 /Parallelization/venv/
 /Parallelization/IniFiles/Temp/
+/TrainTestDataPy2.pkl
+/3_fold_cv_3_random_hyperparameter_initializations_random_search1120/
+/Parallelization/CutStacked.png
+/Parallelization/CutStackedBrief.png
+/Parallelization/ECExamplePt.p
+/Parallelization/IMPAC_DCM_TapasToolbox.mlx
+/Parallelization/ROITimeseries.p
+/Parallelization/ROITimeseriesTest.p
+/Parallelization/TimeseriesFilenames/
+/TrainTestDataWithConfounds.p
+/model.png
+
 

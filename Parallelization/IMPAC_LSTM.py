@@ -204,7 +204,7 @@ def network_from_ini_2(ini_path, aInputShape=None, compiled=True):
 def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True):
     sIni = 'LSTM_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels'
+    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun/LSTM'
     sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
 
     [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
@@ -245,7 +245,7 @@ def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarl
 def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName=''):
     sIni = 'Dense_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels'
+    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun/LSTM'
     sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
 
     [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
@@ -278,10 +278,11 @@ if '__main__' == __name__:
     sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
     [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
 
-    iModel = sys.argv[1]
-    iModel = iModel.split('_')[1]
-    iModel = iModel.split('.')[0]
+    # iModel = sys.argv[1]
+    # iModel = iModel.split('_')[1]
+    # iModel = iModel.split('.')[0]
 
+    iModel='00'
     #fRunLSTMNetOnInput('anatomy', 0, iEpochs=500)
 
     fRunLSTMNetOnInput('anatomy', iModel, iEpochs=500)

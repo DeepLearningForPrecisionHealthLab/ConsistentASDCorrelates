@@ -1,5 +1,5 @@
 """ This code takes the Paris IMPAC Autism study data,and
-trains a dense network as a classifier
+trains a Brain Net CNN as a classifier
 
 The performance metrics being used are:
 
@@ -11,21 +11,36 @@ The performance metrics being used are:
 Written by Cooper Mellema in the Montillo Deep Learning Lab at UT Southwesten Medical Center
 Sept 2018
 """
-
-import numpy as np
 import os
 import sys
+sBrainNetCNNCode = '/project/bioinformatics/DLLab/Cooper/Libraries/ann4brains-master/ann4brains-master'
+sBrainNetCNNCode2 = '/project/bioinformatics/DLLab/Cooper/Libraries/ann4brains-master/ann4brains-master/ann4brains'
+# sys.path.append(sCaffePath)
+
+sys.path.append(sBrainNetCNNCode)
+sys.path.append(sBrainNetCNNCode2)
+#import BrainNetCNNCode
+from ann4brains.nets import BrainNetCNN
+
+import numpy as np
+
 import ast
 import configparser
-import pandas as pd
-from sklearn.metrics import precision_recall_curve, accuracy_score, roc_auc_score, auc, f1_score
 import pickle
+
+# import subprocess
+# subprocess.call(["export", "PYTHONPATH=/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/caffe"
+#                            "-master/python:$PYTOHNPATH"], shell=True)
+# sCaffePath="/project/bioinformatics/DLLab/Cooper/Libraries/caffe1.0.0_segnet/caffe/python"
+
 
 sBrainNetCNNCode = '/project/bioinformatics/DLLab/Cooper/Libraries/ann4brains-master/ann4brains-master'
 sBrainNetCNNCode2 = '/project/bioinformatics/DLLab/Cooper/Libraries/ann4brains-master/ann4brains-master/ann4brains'
+# sys.path.append(sCaffePath)
+
 sys.path.append(sBrainNetCNNCode)
 sys.path.append(sBrainNetCNNCode2)
-# import BrainNetCNNCode
+#import BrainNetCNNCode
 from ann4brains.nets import BrainNetCNN
 
 ###############################################################################
@@ -212,19 +227,19 @@ def fAddLayerFromConfig(config, sLayer, aInputShape):
     sClass=ini_dict['class']
 
     if sClass=='e2e':
-        lsLayer = [sClass, {'n_filters': ini_dict['n_filters'],
+        lsLayer = ['e2e', {'n_filters': ini_dict['n_filters'],
                             'kernel_h': aInputShape[0],
                             'kernel_w': aInputShape[1]
                             }]
 
     elif sClass=='dropout':
-        lsLayer = [sClass, {'dropout_ratio': ini_dict['dropout_ratio']}]
+        lsLayer = ['dropout', {'dropout_ratio': ini_dict['dropout_ratio']}]
 
     elif sClass=='activation':
         lsLayer = [ini_dict['activation'], {'negative_slope': ini_dict['negative_slope']}]
 
     elif sClass=='e2n':
-        lsLayer = [sClass, {'n_filters': ini_dict['n_filters'],
+        lsLayer = ['e2n', {'n_filters': ini_dict['n_filters'],
                             'kernel_h': aInputShape[0],
                             'kernel_w': aInputShape[1]
                             }]
@@ -241,7 +256,7 @@ def fAddLayerFromConfig(config, sLayer, aInputShape):
                              'layer names are: e2e, dropout, activation, e2n, fc, and out')
         elif sClass is None:
             raise ValueError('The Layer Name is NOT specified. (name is None) The only allowed '
-                             'layer names are: e2e, dropout, activation, e2n, fc, and out')
+                             'layer names are: e2e, Dropout, activation, e2n, fc, and out')
     return lsLayer
 
 
@@ -310,13 +325,16 @@ def fReshapeInputData(aXData):
 
     return aXNew
 
-def fRunBrainNetCNNOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True):
+def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpochs=1, bEarlyStopping=True):
     sIni = 'BrainNetCNN_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/BrainNetCNN'
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun' \
+                '/BrainNetCNN'
 
-    [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+    dXData = dData['dXData']
+    dXTest = dData['dXTest']
+    aYData = dData['aYData']
+    aYTest = dData['aYtest']
 
     if sInputName =='anatomy':
         aXData = fReshapeInputData(dXData[sInputName])
@@ -375,17 +393,18 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, b
 
 
 if '__main__' == __name__:
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
-    [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
+    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataPy2.pkl'
+    dData = pickle.load(open(sDataPath, 'rb'))
 
     iModel = sys.argv[1]
     iModel = iModel.split('_')[1]
     iModel = iModel.split('.')[0]
 
+
     sInputName='connectivity'
 
-    for sAtlas in dXData[sInputName]:
-        fRunBrainNetCNNOnInput(sInputName, iModel, sSubInputName=sAtlas)
+    for sAtlas in dData['dXData'][sInputName]:
+        fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
 
 
 

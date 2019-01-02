@@ -13,8 +13,8 @@ np.random.seed(42)
 
 bNewDense=False
 bNewLSTM=False
-bNewBrainNet=False
-bNewStack=True
+bNewBrainNet=True
+bNewStack=False
 
 # Initialize the directories where the ini files will be stored
 def fInitialize():
@@ -22,7 +22,7 @@ def fInitialize():
     sProjectRootDirectory = "/project/bioinformatics/DLLab/Cooper/Code"
     sProjectIdentification = "AutismProject/Parallelization"
 
-    sTargetDirectory = os.path.join(sProjectRootDirectory, sProjectIdentification, 'IniFiles/StackedWithRegularization')
+    sTargetDirectory = os.path.join(sProjectRootDirectory, sProjectIdentification, 'IniFiles')
 
     if not os.path.exists(sTargetDirectory):
         os.makedirs(sTargetDirectory)
@@ -220,7 +220,11 @@ def fGenerateBrainNetCNNINIs(sTargetDirectory, dHyperParam):  # Input shape?
     # Create 50 .ini files
     for iRandomInitialization in range(50):
         random.seed(iRandomInitialization)
-        sIni = 'BrainNetCNN_' + str(iRandomInitialization)
+        if iRandomInitialization < 10:
+            sModelNum='0'+str(iRandomInitialization)
+        else:
+            sModelNum=str(iRandomInitialization)
+        sIni = 'BrainNetCNN_' + sModelNum
 
         iLayers = random.choice(dHyperParam['hidden_layers'])
         iBottomLayerWidth = random.choice(dHyperParam['bottom_layer_width'])

@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=DenseNetWithConfounds
+#SBATCH --job-name=BrainNetISBIrepeat
 #SBATCH --partition=GPUp100
 #SBATCH --nodes=2
-#SBATCH --ntasks=4
+#SBATCH --ntasks=2
 #SBATCH --time=3-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
-#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_DenseConfounds.txt"
+#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_BrainNetISBIRerun.txt"
 
 now=$(date +"%m-%d-%Y,%H:%M:%S")
 echo "Job start: $now"
@@ -14,18 +14,19 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=28
+CORES_PER_TASK=56
 
-INPUTS_COMMAND="ls -v ./IniFiles/D*"
+INPUTS_COMMAND="ls -v ./IniFiles/B*"
 
-TASK_SCRIPT='python script_wrapper_dense.py'
+TASK_SCRIPT='python script_wrapper_brainnet.py'
 
 SRUN_CMD="srun --exclusive -N1 -n1 -c $CORES_PER_TASK"
 PARALLEL_CMD="parallel --delay .2 -j $SLURM_NTASKS --joblog Logs/$SLURM_JOB_ID.task.log"
 
 # set up the lockfiles, it's important to do it here so it only gets done once!
-module load python/3.6.4-anaconda
-source activate /project/bioinformatics/DLLab/shared/CondaEnvironments/CooperAuttfGPUv3
+module load caffe/1.0.0-segnet
+module load python/2.7.14-anaconda
+source activate /project/bioinformatics/DLLab/shared/CondaEnvironments/CooperBrainNetProcessing
 LOCK_DIR="Locks/"$SLURM_JOB_ID'_lock_files'
 eval "python /project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/filelock_utilities.py " $SLURM_JOB_NODELIST $LOCK_DIR
 # wait for the above to finish
