@@ -27,6 +27,7 @@ import numpy as np
 import ast
 import configparser
 import pickle
+import sklearn.metrics as skm
 
 # import subprocess
 # subprocess.call(["export", "PYTHONPATH=/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/caffe"
@@ -65,152 +66,6 @@ def format_dict(dict):
         except ValueError:
             dict[key] = value
     return dict
-
-# def metrics_from_string(metrics):
-#     """
-#     Take a list of stings or a string of a list returns a list of the the metric(s) so they can be passed into the
-#         compile method in a keras model.
-#     Some metrics can be passed to keras as a string, these metrics are found in listStrMetrics, if one is missing please
-#         add it.
-#     :param metric_string:
-#     :return: a list of metrics for keras.
-#     """
-#     listStrMetrics = ['acc', 'accuracy', 'mse', 'mae', 'mape', 'cosine']
-#     strMetrics = str(metrics)
-#     listMetricStrings = re.findall(r'[A-Za-z_]+',strMetrics)
-#     listMetrics = []
-#     for strMetric in listMetricStrings:
-#         if strMetric in listStrMetrics:
-#             kerasMetric = strMetric
-#         else:
-#             try:
-#                 kerasMetric = getattr(keras.metrics, strMetric)
-#             except:
-#                 raise ValueError("%s is not a valid keras metric"%strMetrics)
-#         listMetrics.append(kerasMetric)
-#     return listMetrics
-
-# def get_optimizer_from_config(config):
-#     if 'optimizer' in config.keys():
-#         #if there's an optimizer
-#         optimizer_dct = dict(config['optimizer'])
-#         format_dict(optimizer_dct)
-#         optimizer_class = getattr(keras.optimizers, optimizer_dct['class'])
-#         optimizer_dct.pop('class')
-#         optimizer = optimizer_class(**optimizer_dct)
-#         return optimizer
-#     else:
-#         return None
-
-# def add_layer_from_config(model, config, config_key, aInputShape, api='functional'):
-#     """ By Alex Treacher
-#     This will add a layer to a model from a config file. This is used to build/edit models from an ini file
-#     :param model: the keras model to add the layer to
-#     :param config: the config that has the ini for the layer
-#     :param config_key: the key for the config
-#     :param api: which keras API (functional or sequential) is being used to build the model
-#     :return: Sequential API: the model with the layer added
-#         Functional APU: the last layer that was added
-#     """
-#     ini_dict = dict(config[config_key])
-#     format_dict(ini_dict)
-#     class_to_add = getattr(keras.layers, ini_dict['class'])
-#
-#     sActivation=None
-#     flAlpha=None
-#
-#     if 'activation' in ini_dict.keys():
-#         if ini_dict['activation']=='relu':
-#             sActivation = ini_dict['activation']
-#             flAlpha = ini_dict['alpha']
-#             ini_dict.pop('activation')
-#             ini_dict.pop('alpha')
-#
-#     #Pull out the regularization magnitude
-#     if 'regularizer' in ini_dict.keys():
-#         flL2Alpha=ini_dict['regularizer']
-#         ini_dict.pop('regularizer')
-#         ini_dict['kernel_regularizer']=regularizers.l2(flL2Alpha)
-#
-#     ini_dict.pop('class')
-#     if aInputShape is not None:
-#         ini_dict['input_shape']=aInputShape
-#     if api.lower() == 'sequential': #sequential return the model with added layer
-#         model.add(class_to_add(**ini_dict))
-#         if sActivation is not None:
-#             if sActivation == 'relu':
-#                 model.add(keras.layers.advanced_activations.LeakyReLU(alpha=flAlpha))
-#         return model
-#     if api.lower() == 'functional':  #functional model return the new layer
-#         output_layer = class_to_add(**ini_dict)(model)
-#         return output_layer
-#
-# def network_from_ini_2(ini_path, aInputShape=None, compiled=True):
-#     """ By Alex Treacher
-#     This is an updated version of network_from_ini that needs more testing, but should be more stable, include more
-#         features and more automated in the long run
-#     This is designed to take a ini file and create a neural network from it
-#     Specific format is needed, the format can be seen from outputs of the above functions that create the ini files
-#     In order to be consistent a sequental model should start with a dedicated InputLayer
-#     :param ini_path: The location of the ini file
-#     :param api: The api that the model will be made from. Currently supports functional and sequential
-#     :return: keras model based on the ini. If api=='functional' and compiled==False:
-#          returns [input_layer, output_layer] so the network can be manipulated or compiled
-#     """
-#     # First, we load the .ini file as 'config'
-#     config = read_config_file(ini_path)
-#
-#     #make sure the first layer is an input
-#     layers = [s for s in config.sections() if s.startswith('layer/')]
-#     strAPI = config['model']['class'].lower()
-#
-#     #Initiate the model with the input layer
-#     if strAPI=='sequential':
-#         kerasModel = keras.models.Sequential()
-#         #add the input layer
-#         add_layer_from_config(kerasModel, config, layers[0], aInputShape, api=strAPI)
-#
-#     if strAPI=='functional':
-#         input_config = dict(config[layers[0]])
-#         input_class = getattr(keras.layers, input_config['class'])
-#         input_config.pop('class')
-#         format_dict(input_config)
-#         kerasModel = input_class(**input_config)
-#         layerFunctionalInput = kerasModel
-#     #remove the input layer so as to not try to add it again later
-#     layers = layers[1:]
-#
-#     # add the layers
-#     for intI, strLayer in enumerate(layers):
-#         if intI + 1 == layers.__len__(): #last layer
-#             kerasModel.add(keras.layers.Flatten())
-#         kerasModel = add_layer_from_config(kerasModel, config, strLayer, aInputShape, api=strAPI)
-#         if intI + 1 == layers.__len__(): #last layer
-#                 layerFunctionalOutput = kerasModel
-#
-#     #compile if compiled==True.
-#     if compiled == True:
-#         #get the optimzier
-#         optimizer = get_optimizer_from_config(config)
-#         if isinstance(optimizer, type(None)):
-#             raise KeyError("Opimizer not found in %s. Please include one or set compiled = False."%ini_path)
-#         #get the metrics
-#         try:
-#             strMetrics = config['model']['metrics']
-#         except KeyError:
-#             strMetrics = 'accuracy'
-#         metrics = metrics_from_string(strMetrics)
-#         if strAPI == 'functional':
-#             kerasModel = keras.models.Model(inputs=layerFunctionalInput, outputs=layerFunctionalOutput)
-#         kerasModel.compile(loss=config['model']['loss'], optimizer=optimizer, metrics=metrics)
-#         return kerasModel
-#     #return non-compiled model
-#     else:
-#         if strAPI == 'functional':
-#             return [layerFunctionalInput, layerFunctionalOutput]
-#         else:
-#             return kerasModel
-
 
 ################################################################################
 def fAddLayerFromConfig(config, sLayer, aInputShape):
@@ -326,68 +181,148 @@ def fReshapeInputData(aXData):
     return aXNew
 
 def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpochs=1, bEarlyStopping=True):
+
     sIni = 'BrainNetCNN_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
     sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun' \
                 '/BrainNetCNN'
 
-    dXData = dData['dXData']
-    dXTest = dData['dXTest']
-    aYData = dData['aYData']
-    aYTest = dData['aYtest']
+    if not os.path.isfile(sSavePath + '/' + sIni + sInputName + "FullModelNetwork.p"):
 
-    if sInputName =='anatomy':
-        aXData = fReshapeInputData(dXData[sInputName])
-        aXTest = fReshapeInputData(dXTest[sInputName])
-    else:
-        aXData = fReshapeInputData(dXData[sInputName][sSubInputName])
-        aXTest = fReshapeInputData(dXTest[sInputName][sSubInputName])
+        dXData = dData['dXData']
+        dXTest = dData['dXTest']
+        aYData = dData['aYData']
+        aYTest = dData['aYtest']
+
+        if sInputName =='anatomy':
+            aXData = fReshapeInputData(dXData[sInputName])
+            aXTest = fReshapeInputData(dXTest[sInputName])
+        else:
+            aXData = fReshapeInputData(dXData[sInputName][sSubInputName])
+            aXTest = fReshapeInputData(dXTest[sInputName][sSubInputName])
 
 
-    # The required dimensions for the BrainNetCNN network is size
-    # N x C X H x W, where N is the number of samples, C is
-    # the number of channels in each sample, and, H and W are the
-    # spatial dimensions for each sample. So, we expand the Channels
-    # Dimension to 1
-    aXData = np.expand_dims(aXData, axis=1)
+        # The required dimensions for the BrainNetCNN network is size
+        # N x C X H x W, where N is the number of samples, C is
+        # the number of channels in each sample, and, H and W are the
+        # spatial dimensions for each sample. So, we expand the Channels
+        # Dimension to 1
+        aXData = np.expand_dims(aXData, axis=1)
 
-    aXTest = np.expand_dims(aXTest, axis=1)
+        aXTest = np.expand_dims(aXTest, axis=1)
 
-    aXData = np.float32(aXData)
-    aXTest = np.float32(aXTest)
-    aYData = np.float32(aYData)
-    aYTest = np.float32(aYTest)
+        aXData = np.float32(aXData)
+        aXTest = np.float32(aXTest)
+        aYData = np.float32(aYData)
+        aYTest = np.float32(aYTest)
 
-    aDataShape = [aXData.shape[2], aXData.shape[3]]
+        aDataShape = [aXData.shape[2], aXData.shape[3]]
 
-    iSplitSize = int(aXData.shape[0]/3)
+        iSplitSize = int(aXData.shape[0]/3)
 
-    # Split the Data for 3x cross validation
-    lsXDataSplit = [[aXData[iSplitSize:,:,:,:]], # skip over beginning
-                    [np.append(aXData[:iSplitSize,:], aXData[2*iSplitSize:,:], axis=0)], #split over middle
-                    [aXData[:2*iSplitSize,:,:,:]] # skip over end
-                    ]
-    lsYDataSplit = [[aYData[iSplitSize:,:]], # skip over beginning
-                    [np.append(aYData[:iSplitSize,:], aYData[2*iSplitSize:,:], axis=0)], #split over middle
-                    [aYData[:2*iSplitSize,:]] # skip over end
-                    ]
-    lsXVal =[[aXData[:iSplitSize,:,:,:]], # include only beginning
-             [aXData[iSplitSize:2*iSplitSize,:,:,:]], # include only middle
-             [aXData[2*iSplitSize:,:,:,:]] # include only end
-             ]
-    lsYVal =[[aYData[:iSplitSize,:]], # include only beginning
-             [aYData[iSplitSize:2*iSplitSize,:]], # include only middle
-             [aYData[2*iSplitSize:,:]] # include only end
-             ]
+        # Split the Data for 3x cross validation
+        lsXDataSplit = [[aXData[iSplitSize:,:,:,:]], # skip over beginning
+                        [np.append(aXData[:iSplitSize,:], aXData[2*iSplitSize:,:], axis=0)], #split over middle
+                        [aXData[:2*iSplitSize,:,:,:]] # skip over end
+                        ]
+        lsYDataSplit = [[aYData[iSplitSize:,:]], # skip over beginning
+                        [np.append(aYData[:iSplitSize,:], aYData[2*iSplitSize:,:], axis=0)], #split over middle
+                        [aYData[:2*iSplitSize,:]] # skip over end
+                        ]
+        lsXVal =[[aXData[:iSplitSize,:,:,:]], # include only beginning
+                 [aXData[iSplitSize:2*iSplitSize,:,:,:]], # include only middle
+                 [aXData[2*iSplitSize:,:,:,:]] # include only end
+                 ]
+        lsYVal =[[aYData[:iSplitSize,:]], # include only beginning
+                 [aYData[iSplitSize:2*iSplitSize,:]], # include only middle
+                 [aYData[2*iSplitSize:,:]] # include only end
+                 ]
 
-    for iCrossVal in range(3):
-        BrainNetCNNModel = fModelArchFromIni(sIniPath, sIni, aDataShape, sSavePath, (iCrossVal+1))
+        #First we fit the cross-validation models,
+        for iCrossVal in range(3):
+            if not os.path.isfile(sSavePath + sIni + "Cross Val"+str(iCrossVal)+"Network.p"):
 
-        BrainNetCNNModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0], lsXVal[iCrossVal][0], lsYVal[iCrossVal][0])
-        aPredicted=BrainNetCNNModel.predict(aXTest)
+                print 'running cross val ' + str(iCrossVal)
+                BrainNetCNNModel = fModelArchFromIni(sIniPath, sIni, aDataShape, sSavePath, (iCrossVal+1))
 
-        pickle.dump(aPredicted, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
-                                                                    'PredictedResultsCrossVal'+str(iCrossVal+1)+'.p', 'wb'))
+                BrainNetCNNModel.pars['max_iter'] = 1000
+                BrainNetCNNModel.pars['test_interval'] = 50
+                BrainNetCNNModel.pars['snapshot'] = 200
+
+                BrainNetCNNModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0], lsXVal[iCrossVal][0], lsYVal[iCrossVal][0])
+                aPredicted=BrainNetCNNModel.predict(lsXVal[iCrossVal][0])
+
+                pickle.dump(aPredicted, open(os.path.join(sSavePath, sIni) + sSubInputName +
+                                             'CrossVal' + str(
+                    iCrossVal) + 'Predicted.p', 'wb'))
+
+                # # Now we find the performance by several metrics
+                # print type(lsYVal[iCrossVal])
+                # print type(aPredicted)
+                # aYVal=np.array(lsYVal[iCrossVal][0][:])
+                # aYVal=np.rint(aYVal)
+                #
+                # print aYVal.shape
+                # print aPredicted
+                #
+                # BrainNetROCAUCScore = skm.roc_auc_score(aYVal, aPredicted)
+                # precisions, recalls, thresholds = skm.precision_recall_curve(lsYVal[iCrossVal], aPredicted)
+                # BrainNetPRAUCScore = skm.auc(recalls, precisions)
+                # BrainNetF1Score = skm.f1_score(lsYVal[iCrossVal], np.rint((aPredicted-min(aPredicted))/(max(aPredicted)-min(
+                #     aPredicted))))
+                # BrainNetAccuracyScore = skm.accuracy_score(lsYVal[iCrossVal], np.rint((aPredicted-min(aPredicted))/(max(
+                #     aPredicted)-min(aPredicted))), normalize=True)
+                #
+                # #Then we save the performace metrics
+                pickle.dump(BrainNetCNNModel, open(sSavePath + '/' + sIni + sSubInputName + "Cross Val"+str(
+                    iCrossVal)+"Network.p",
+                                                   'wb'))
+                #
+                # dResults ={
+                #     'acc': BrainNetAccuracyScore,
+                #     'pr_auc': BrainNetPRAUCScore,
+                #     'F1': BrainNetF1Score,
+                #     'roc_auc': BrainNetROCAUCScore
+                # }
+                #
+                # pickle.dump(dResults, open(sSavePath + sIni + "Cross Val"+str(iCrossVal)+"SummaryResults.p", 'wb'))
+
+        #Then we fit the full model
+        if not os.path.isfile(sSavePath + '/' + sIni + sInputName + "FullModelNetwork.p"):
+            print 'running full model'
+            BrainNetCNNModel = fModelArchFromIni(sIniPath, sIni, aDataShape, sSavePath, 0)
+
+            BrainNetCNNModel.pars['max_iter'] = 1000
+            BrainNetCNNModel.pars['test_interval'] = 50
+            BrainNetCNNModel.pars['snapshot'] = 200
+
+            BrainNetCNNModel.fit(aXData, aYData, aXTest, aYTest)
+            aPredicted = BrainNetCNNModel.predict(aXTest)
+
+            pickle.dump(aPredicted, open(os.path.join(sSavePath, sIni) + sSubInputName + 'FullModelPredicted.p',
+                        'wb'))
+
+            # # Now we find the performance by several metrics
+            # BrainNetROCAUCScore = skm.roc_auc_score(aYTest, aPredicted)
+            # precisions, recalls, thresholds = skm.precision_recall_curve(aYTest, aPredicted)
+            # BrainNetPRAUCScore = skm.auc(recalls, precisions)
+            # BrainNetF1Score = skm.f1_score(aYTest, np.rint((aPredicted - min(aPredicted)) / (max(aPredicted) - min(
+            #     aPredicted))))
+            # BrainNetAccuracyScore = skm.accuracy_score(aYTest, np.rint((aPredicted - min(aPredicted)) / (max(
+            #     aPredicted) - min(aPredicted))), normalize=True)
+            #
+            # # Then we save the performace metrics
+            pickle.dump(BrainNetCNNModel, open(sSavePath + '/' + sIni + sSubInputName + "FullModelNetwork.p", 'wb'))
+            #
+            # dResults = {
+            #     'acc': BrainNetAccuracyScore,
+            #     'pr_auc': BrainNetPRAUCScore,
+            #     'F1': BrainNetF1Score,
+            #     'roc_auc': BrainNetROCAUCScore
+            # }
+            #
+            # pickle.dump(dResults, open(sSavePath + sIni + "FullModelSummaryResults.p", 'wb'))
+
 
 
 
@@ -396,131 +331,34 @@ if '__main__' == __name__:
     sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataPy2.pkl'
     dData = pickle.load(open(sDataPath, 'rb'))
 
-    iModel = sys.argv[1]
-    iModel = iModel.split('_')[1]
-    iModel = iModel.split('.')[0]
+    bTest=False
+
+    if not bTest==True:
+        iModel = sys.argv[1]
+        iModel = iModel.split('_')[1]
+        iModel = iModel.split('.')[0]
+
+        sInputName = 'connectivity'
+
+        for sAtlas in dData['dXData'][sInputName]:
+            print 'running ' + sAtlas + ' atlas'
+
+            fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
+
+    else:
+        for iModel in range(50):
+
+            if iModel<10:
+                iModel='0'+str(iModel)
+            else:
+                iModel=str(iModel)
+
+            sInputName='connectivity'
+
+            for sAtlas in dData['dXData'][sInputName]:
+                print 'running ' + sAtlas + ' atlas'
+
+                fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
 
 
-    sInputName='connectivity'
 
-    for sAtlas in dData['dXData'][sInputName]:
-        fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName=''):
-#
-#
-#     sIni = 'BrainNetCNN_' + str(iModelNum)
-#     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-#     sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels'
-#     sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
-#
-#     [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
-#
-#     if sInputName =='anatomy':
-#         aXData = dXData[sInputName]
-#         aXTest = dXTest[sInputName]
-#     else:
-#         aXData = dXData[sInputName][sSubInputName]
-#         aXTest = dXTest[sInputName][sSubInputName]
-#
-#     # The required dimensions for the BrainNetCNN network is size
-#     # N x H x W x C, where N is the number of samples, C is
-#     # the number of channels in each sample, and, H and W are the
-#     # spatial dimensions for each sample.
-#     aXData = np.expand_dims(aXData, axis=1)
-#     aXData = np.expand_dims(aXData, axis=3)
-#
-#     aXTest = np.expand_dims(aXTest, axis=1)
-#     aXTest = np.expand_dims(aXTest, axis=3)
-#
-#     aDataShape=[aSData.shape[1], aXData.shape[2]]
-#
-#     caffeModelArch=fModelArchFromIni(sIniPath, aInputShape=aDataShape)
-#
-#     kmModel.load_weights(sWeightsPath)
-#
-#     return kmModel
-#
-#
-# if '__main__' == __name__:
-#     sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
-#     [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
-#
-#     iModel=sys.argv[1]
-#     iModel=iModel.split('_')[1]
-#     iModel=iModel.split('.')[0]
-#
-#     fRunBrainNetCNNOnInput('anatomy', iModel, iEpochs=500)
-#     for keys in dXData['connectivity']:
-#        fRunBrainNetCNNOnInput('connectivity', iModel, sSubInputName=keys, iEpochs=500)
-#     for keys in dXData['combined']:
-#         fRunBrainNetCNNOnInput('combined', iModel, sSubInputName=keys, iEpochs=500)
-#
-#
-#
-#
-#
-#
-# ###########################################################################################################
-#
-#     sTargetDirectory = fInitialize(sIni)
-#
-#
-#     # Here we expand the dimensions for the neural net to work properly
-#     # the added 1st dimension is the number of channels from the
-#     # patient, in this case, all measurements are of one connectivity
-#     # 'channel', not multiple as RGB images would be.
-#
-#     # The required dimensions for BrainNetCNN is size
-#     # N x C x H x W, where N is the number of samples, C is
-#     # the number of channels in each sample, and, H and W are the
-#     # spatial dimensions for each sample.
-#     xData = np.expand_dims(xData, axis=1)
-#     xTest = np.expand_dims(xTest, axis=1)
-#     xVal = np.expand_dims(xVal, axis=1)
-#
-#     # initializing the architexture
-#     BrainNetArch = [ # load from ini file
-#         ['e2n', {'n_filters': 16,
-#                  'kernel_h': xData.shape[2],
-#                  'kernel_w': xData.shape[3]}],
-#         ['dropout', {'dropout_ratio': 0.5}],
-#         ['relu', {'negative_slope': 0.33}],
-#         ['fc', {'n_filters': 30}],
-#         ['relu', {'negative_slope': 0.33}],
-#         ['out', {'n_filters': 1}]
-#     ]
-#
-#     BrainNetFullNetwork = BrainNetCNN(sIni, BrainNetArch, hardware='gpu', dir_data=sTargetDirectory)
-#     BrainNetFullNetwork.fit(xData, yData, xVal, yVal)
-#     yPredicted = BrainNetFullNetwork.predict(xTest)
-#
-#     # Now we print out the performance by several metrics
-#     BrainNetROCAUCScore = roc_auc_score(yTest, yPredicted)
-#     precisions, recalls, thresholds = precision_recall_curve(yTest, yPredicted)
-#     BrainNetPRAUCScore = auc(recalls, precisions)
-#     BrainNetF1Score = f1_score(yTest, np.rint((yPredicted-min(yPredicted))/(max(yPredicted)-min(yPredicted))))
-#     BrainNetAccuracyScore = accuracy_score(yTest, np.rint((yPredicted-min(yPredicted))/(max(yPredicted)-min(yPredicted))), normalize=True)
-#
-#     #Then we save the performace metrics
-#     pickle.dump(BrainNetFullNetwork, open(sTargetDirectory + sIni + "FullNetwork.p", 'wb'))
-#
-#     pdResults['BrainNetCNN'] = [BrainNetAccuracyScore, BrainNetPRAUCScore, BrainNetF1Score, BrainNetROCAUCScore]
-#     pdResults.topickle

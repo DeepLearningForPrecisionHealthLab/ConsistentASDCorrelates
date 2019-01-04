@@ -201,17 +201,64 @@ def network_from_ini_2(ini_path, aInputShape=None, compiled=True):
 
 ################################################################################
 
-def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True):
+def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True, b2Atlas=False):
+    """
+    Runs the network architecture with a specified subset of features
+    :param sInputName: a string that describes which input modality is being used, 'anatomy, 'AllAtlases',
+        '2Atlas' (all atlases pairwise), or 'combined' for single atlas plus anatomical data
+    :param iModelNum: the number of the architecture being used [0, 49] as initialized in IMPAC_ini_generator.py
+    :param sWeightsPath: string: the location of the .h5 file where the weights are formed
+    :param sSubInputName: string: anatomical atlas for the 'combined' condition described in sInputName
+    :param iEpochs: int: maximum number of epochs for the network to train
+    :param bEarlyStopping: boolean: if True, will train with an early stopping paradigm
+        NOTE: the cross validation is always done with early stopping: the retraining can either be set to undergo
+        early stopping OR to go for a fixed iEpochs as based off the cross-validation
+
+    :param b2Atlas: boolean: should be True if sInput name is '2Atlas' (formats 2-atlas data correctly)
+    :return: NA
+    """
+
+    # Initialize variables
     sIni = 'LSTM_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
     sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun/LSTM'
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
 
-    [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
+    if not os.path.isdir(sSavePath):
+        os.makedirs(sSavePath, exist_ok=True)
 
+    if b2Atlas == True:
+        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData2Atlas.p'
+        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2Atlases'
+    else:
+        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
+
+    # Load the master file of the data pre-organized into train, test
+    [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+
+    # Fetch only the subset of the data with the desired input features
+    # (as given by sInputName and sSubInputName)
     if sInputName == 'anatomy':
         aXData = dXData[sInputName]
         aXTest = dXTest[sInputName]
+
+    elif sInputName == 'AllAtlases':
+
+        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/AllAtlases'
+
+        aXData = dXData['anatomy']
+        aXTest = dXTest['anatomy']
+
+        for key in dXData['connectivity'].keys():
+            if (not key == 'basc064') and (not key == 'basc197'):
+                aXData = np.append(aXData, np.array(dXData['connectivity'][key]), axis=1)
+                aXTest = np.append(aXTest, np.array(dXTest['connectivity'][key]), axis=1)
+            else:
+                None
+
+    elif sSubInputName == '2Atlas':
+        aXData = dXData[sInputName]
+        aXTest = dXTest[sInputName]
+
     else:
         aXData = dXData[sInputName][sSubInputName]
         aXTest = dXTest[sInputName][sSubInputName]
@@ -224,23 +271,130 @@ def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarl
 
     aXTest = np.expand_dims(aXTest, axis=1)
 
-    aDataShape = [aXData.shape[1], aXData.shape[2]]
+    aXData = np.float32(aXData)
+    aXTest = np.float32(aXTest)
+    aYData = np.float32(aYData)
+    aYTest = np.float32(aYTest)
+
+    # Initialize for splitting for 3x cross validation
+    iSplitSize = int(aXData.shape[0] / 3)
+
+    # Split the Data for 3x cross validation
+    lsXDataSplit = [[aXData[iSplitSize:, :, :]],  # skip over beginning
+                    [np.append(aXData[:iSplitSize, :, :], aXData[2 * iSplitSize:, :, :], axis=0)],  # split over middle
+                    [aXData[:2 * iSplitSize, :, :]]  # skip over end
+                    ]
+    lsYDataSplit = [[aYData[iSplitSize:, :]],  # skip over beginning
+                    [np.append(aYData[:iSplitSize, :], aYData[2 * iSplitSize:, :], axis=0)],  # split over middle
+                    [aYData[:2 * iSplitSize, :]]  # skip over end
+                    ]
+    lsXVal = [[aXData[:iSplitSize, :, :]],  # include only beginning
+              [aXData[iSplitSize:2 * iSplitSize, :, :]],  # include only middle
+              [aXData[2 * iSplitSize:, :, :]]  # include only end
+              ]
+    lsYVal = [[aYData[:iSplitSize, :]],  # include only beginning
+              [aYData[iSplitSize:2 * iSplitSize, :]],  # include only middle
+              [aYData[2 * iSplitSize:, :]]  # include only end
+              ]
+
+    # perform the 3x cross validation
+    for iCrossVal in range(3):
+        # initialize variables
+        iDataShape = lsXDataSplit[iCrossVal][0][0, :].shape[1]
+        aDataShape = [1, iDataShape]
+
+        # generate the network for the cross-validation
+        LSTMCrossValModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+
+        kerStopping = keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
+
+        # Fit the network
+        history = LSTMCrossValModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0],
+                                        validation_data=(lsXVal[iCrossVal][0], lsYVal[iCrossVal][0]), epochs=iEpochs,
+                                        callbacks=[kerStopping])
+
+        # Score the network
+        aPredicted = LSTMCrossValModel.predict(lsXVal[iCrossVal][0])
+        flROCScore = roc_auc_score(lsYVal[iCrossVal][0], aPredicted)
+
+        # Save the network Score and history (NOT weights)
+        pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                     'ROCScoreCrossVal' + str(iCrossVal + 1) + '.p', 'wb'))
+
+        pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                  'ModelHistoryCrossVal' + str(iCrossVal + 1) + '.p', 'wb'))
+
+
+    # initialize the network for re-training with the whole dataset
+    iDataShape = aXData[0, :].shape[1]
+    aDataShape = [1, iDataShape]
 
     kmModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
 
+    # Set train the network either with the early stopping paradigm or with a set number of epochs
     if bEarlyStopping == True:
-        kerStopping = keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10,
-                                                    restore_best_weights=True)
-        kmModel.fit(aXData, aYData, epochs=iEpochs, callbacks=[kerStopping])
+        kerStopping = keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
+        history = kmModel.fit(aXData, aYData, epochs=iEpochs, callbacks=[kerStopping])
     else:
-        kmModel.fit(aXData, aYData, epochs=iEpochs)
+        history = kmModel.fit(aXData, aYData, epochs=iEpochs)
+
+    # Predict on the test data
     aPredicted = kmModel.predict(aXTest)
+    flROCScore = roc_auc_score(aYTest, aPredicted)
 
-    kmModel.save_weights(sSavePath + '/' + sIni + '_' + sInputName + sSubInputName + '.h5')
-    # kmModel.save(sSavePath + '/' + sIni + sInputName + sSubInputName + 'TestEarlyStop.h5', include_optimizer=False, overwrite=True)
-    pickle.dump(aPredicted,
-                open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName + 'PredictedResults.p', 'wb'))
+    # Save the model weights and history
+    kmModel.save_weights(sSavePath + '/' + sIni + '_' + sInputName + sSubInputName + 'weights.h5')
+    pickle.dump(aPredicted, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName + 'PredictedResults.p', 'wb'))
+    pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                 'ROCScoreTest.p', 'wb'))
+    pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                              'ModelHistory.p', 'wb'))
 
+
+#def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True):
+
+
+    # sIni = 'LSTM_' + str(iModelNum)
+    # sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
+    # sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun/LSTM'
+    # sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+    #
+    # [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
+    #
+    # if sInputName == 'anatomy':
+    #     aXData = dXData[sInputName]
+    #     aXTest = dXTest[sInputName]
+    # else:
+    #     aXData = dXData[sInputName][sSubInputName]
+    #     aXTest = dXTest[sInputName][sSubInputName]
+    #
+    # # The required dimensions for the LSTM network is size
+    # # N x I x D, where N is the number of samples,
+    # # I is the number of inputs and D is the
+    # # spatial dimensions for each sample.
+    # aXData = np.expand_dims(aXData, axis=1)
+    #
+    # aXTest = np.expand_dims(aXTest, axis=1)
+    #
+    # aDataShape = [aXData.shape[1], aXData.shape[2]]
+    #
+    # kmModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+    #
+    # if bEarlyStopping == True:
+    #     kerStopping = keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10,
+    #                                                 restore_best_weights=True)
+    #     kmModel.fit(aXData, aYData, epochs=iEpochs, callbacks=[kerStopping])
+    # else:
+    #     kmModel.fit(aXData, aYData, epochs=iEpochs)
+    # aPredicted = kmModel.predict(aXTest)
+    #
+    # kmModel.save_weights(sSavePath + '/' + sIni + '_' + sInputName + sSubInputName + '.h5')
+    # # kmModel.save(sSavePath + '/' + sIni + sInputName + sSubInputName + 'TestEarlyStop.h5', include_optimizer=False, overwrite=True)
+    # pickle.dump(aPredicted,
+    #             open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName + 'PredictedResults.p', 'wb'))
+    #
+    #
+    #
 
 def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName=''):
     sIni = 'Dense_' + str(iModelNum)
@@ -278,12 +432,12 @@ if '__main__' == __name__:
     sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
     [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
 
-    # iModel = sys.argv[1]
-    # iModel = iModel.split('_')[1]
-    # iModel = iModel.split('.')[0]
-
-    iModel='00'
-    #fRunLSTMNetOnInput('anatomy', 0, iEpochs=500)
+    try:
+        iModel = sys.argv[1]
+        iModel = iModel.split('_')[1]
+        iModel = iModel.split('.')[0]
+    except:
+        iModel='00'
 
     fRunLSTMNetOnInput('anatomy', iModel, iEpochs=500)
     for keys in dXData['connectivity']:

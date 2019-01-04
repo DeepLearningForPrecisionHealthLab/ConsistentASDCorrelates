@@ -422,12 +422,14 @@ if '__main__' == __name__:
     [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
 
     # Fetch the name of the input features and model architecture number from the parallel wrapper
-    sInfo=sys.argv[1]
-    sInfo=sInfo.split('.')[-2]
-    sModel=sInfo[-2:]
-    sInputName=sInfo[:-2]
-    sInputName=sInputName.split('/')[-1]
-    sInputName=sInputName.split(',')[0]
+    # sInfo=sys.argv[1]
+    # sInfo=sInfo.split('.')[-2]
+    # sModel=sInfo[-2:]
+    # sInputName=sInfo[:-2]
+    # sInputName=sInputName.split('/')[-1]
+    # sInputName=sInputName.split(',')[0]
+
+    sModel='00'
 
     bCombined=False
 
