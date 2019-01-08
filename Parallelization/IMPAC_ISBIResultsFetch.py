@@ -91,7 +91,7 @@ for sNetworkName in lsNetworks:
 
                 # fetch the average performance across 3 cross-validations
                 for iCV in range(3):
-                    iCV=iCV+1
+                    iCV=iCV + 1
                     sCV=str(iCV)
 
                     flNetworkCV=fFetch(os.path.join(sNetworkPath, sNetwork) + 'CrossVal' + sCV + '.p')
@@ -121,6 +121,7 @@ lsComb = ['combined ' + sAtlas for sAtlas in lsAtlases]
 lsAllTested = ['anatomy'] + lsConn[:] + lsComb[:]
 
 pdFinalResults = pd.DataFrame(index=lsAllTested, columns=lsNetworks)
+pdFinalModelNumbers = pd.DataFrame(index=lsAllTested, columns=lsNetworks)
 
 # fill the pandas dataframe with the test results of the models that had
 # the highest performance by cross-validation
@@ -137,8 +138,6 @@ for sNetwork in lsNetworks:
                 dResults[sNetwork][sIndex]['Avg CV ROC AUC'] == flMaxCV].tolist()[0]
             flTestVal = dResults[sNetwork][sIndex]['Test ROC AUC'][iLoc]
 
-            pdFinalResults.loc[sIndex][sNetwork] = flTestVal
-
         # fetch the top performing (by CV ROC AUC) TEST performance
         # looping through all other modalities
         else:
@@ -148,6 +147,10 @@ for sNetwork in lsNetworks:
                 dResults[sNetwork][sPrefix][sAtlas]['Avg CV ROC AUC'] == flMaxCV].tolist()[0]
             flTestVal = dResults[sNetwork][sPrefix][sAtlas]['Test ROC AUC'][iLoc]
 
-            pdFinalResults.loc[sIndex][sNetwork] = flTestVal
+        pdFinalResults.loc[sIndex][sNetwork] = flTestVal
+        pdFinalModelNumbers.loc[sIndex][sNetwork] = iLoc
 
-pdFinalResults.head()
+pickle.dump(pdFinalResults, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
+                                 '/TrainedModels/ISBIRerun/BestROCAUCSummary.p', 'wb'))
+pickle.dump(pdFinalModelNumbers, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
+                                 '/TrainedModels/ISBIRerun/BestModelNumbers.p', 'wb'))

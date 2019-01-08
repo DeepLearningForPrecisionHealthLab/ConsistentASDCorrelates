@@ -245,7 +245,7 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpoc
                 print 'running cross val ' + str(iCrossVal)
                 BrainNetCNNModel = fModelArchFromIni(sIniPath, sIni, aDataShape, sSavePath, (iCrossVal+1))
 
-                BrainNetCNNModel.pars['max_iter'] = 1000
+                BrainNetCNNModel.pars['max_iter'] = 500
                 BrainNetCNNModel.pars['test_interval'] = 50
                 BrainNetCNNModel.pars['snapshot'] = 200
 
