@@ -133,10 +133,10 @@ class cMachineLearning(object):
 
         # If a pre-fitted model is available, use that one
         elif skcModel is not None:
-            aPredicted=skcModel.predict(self.xTest)
+            aPredicted=skcModel.predict_proba(self.xTest)
         else:
             skcModel = cClassifier.fit(self.xData, self.yData)
-            aPredicted = cClassifier.predict(self.xTest)
+            aPredicted = cClassifier.predict_proba(self.xTest)[:,1]
 
         aRoundedPredicted = aPredicted
         aRoundedPredicted[aRoundedPredicted >= 0.5] = 1
@@ -632,7 +632,9 @@ if __name__ == '__main__':
     # Create a directory to store results in- flagged with the day it was run
     # named by parameters for random search with
     # internal folders named for the data being used
-    sTargetDirectory = "3_fold_cv_3_random_hyperparameter_initializations_random_search" + datetime.date.today().strftime('%m''%d')
+    sTargetDirectory = "3_fold_cv_50_random_hyperparameter_initializations_random_search" + datetime.date.today(
+        
+    ).strftime('%m''%d')
 
     # Import the pre-trained models from this location (if they exist). If not, set to 'None'
     sPreSavedDirectory = "A"

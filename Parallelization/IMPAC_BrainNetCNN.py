@@ -245,9 +245,9 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpoc
                 print 'running cross val ' + str(iCrossVal)
                 BrainNetCNNModel = fModelArchFromIni(sIniPath, sIni, aDataShape, sSavePath, (iCrossVal+1))
 
-                BrainNetCNNModel.pars['max_iter'] = 500
+                BrainNetCNNModel.pars['max_iter'] = 500 #500
                 BrainNetCNNModel.pars['test_interval'] = 50
-                BrainNetCNNModel.pars['snapshot'] = 200
+                BrainNetCNNModel.pars['snapshot'] = 100 #100
 
                 BrainNetCNNModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0], lsXVal[iCrossVal][0], lsYVal[iCrossVal][0])
                 aPredicted=BrainNetCNNModel.predict(lsXVal[iCrossVal][0])
@@ -275,8 +275,7 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpoc
                 #
                 # #Then we save the performace metrics
                 pickle.dump(BrainNetCNNModel, open(sSavePath + '/' + sIni + sSubInputName + "Cross Val"+str(
-                    iCrossVal)+"Network.p",
-                                                   'wb'))
+                    iCrossVal)+"Network.p",'wb'))
                 #
                 # dResults ={
                 #     'acc': BrainNetAccuracyScore,
@@ -292,9 +291,9 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpoc
             print 'running full model'
             BrainNetCNNModel = fModelArchFromIni(sIniPath, sIni, aDataShape, sSavePath, 0)
 
-            BrainNetCNNModel.pars['max_iter'] = 1000
+            BrainNetCNNModel.pars['max_iter'] = 500 #500
             BrainNetCNNModel.pars['test_interval'] = 50
-            BrainNetCNNModel.pars['snapshot'] = 200
+            BrainNetCNNModel.pars['snapshot'] = 100 #100
 
             BrainNetCNNModel.fit(aXData, aYData, aXTest, aYTest)
             aPredicted = BrainNetCNNModel.predict(aXTest)
@@ -343,7 +342,9 @@ if '__main__' == __name__:
         for sAtlas in dData['dXData'][sInputName]:
             print 'running ' + sAtlas + ' atlas'
 
+
             fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
+
 
     else:
         for iModel in range(50):
@@ -359,6 +360,7 @@ if '__main__' == __name__:
                 print 'running ' + sAtlas + ' atlas'
 
                 fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
+
 
 
 

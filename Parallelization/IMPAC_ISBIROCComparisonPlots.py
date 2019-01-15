@@ -78,6 +78,7 @@ def fFetchPredictedResults(dModels):
 
             dPredicted[sModel + ' ' + sInput] = aPredicted
 
+
         else:
             sDataPath = "/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Results/3_fold_cv_50_random_" \
                         "hyperparameter_initializations_random_search0924"
@@ -87,16 +88,28 @@ def fFetchPredictedResults(dModels):
             skModel = pkl.load(open(sModelPath, 'rb'))
 
             if not sInput=='anatomy':
-                sCombination, sAtlas = sInput.split('_')
+                lsInputSplit = sInput.split('_')
+                sCombination = lsInputSplit[0]
+                if len(lsInputSplit[1:]) > 1:
+                    sAtlas = '_'.join(lsInputSplit[1:])
+                else:
+                    sAtlas = lsInputSplit[1]
 
                 aXTest = dXTest[sCombination][sAtlas]
             else:
                 aXTest = dXTest[sInput]
 
-            aPredicted = np.array(skModel.predict_proba(aXTest))[:,1]
-            aPredicted = np.expand_dims(aPredicted, axis=1)
+            try:
+                aPredicted = np.array(skModel.predict_proba(aXTest))[:,1] #predict vs predict_proba
+            except:
+                aPredicted = np.array(skModel.predict(aXTest))
+
+
+            if not len(aPredicted.shape)>1:
+                aPredicted = np.expand_dims(aPredicted, axis=1)
 
             dPredicted[sModel + ' ' + sInput] = aPredicted
+
     return dPredicted
 
 def fPlotMultiROC(dPredictions, sKey, aTrue, sSavePath):
@@ -113,7 +126,7 @@ def fPlotMultiROC(dPredictions, sKey, aTrue, sSavePath):
     for sType in dPredictions.keys():
         aPredicted = dPredictions[sType]
         aFPR, aTPR, aThresholds = skm.roc_curve(aTrue, aPredicted)
-        flROCAUC= skm.roc_auc_score(aTrue, aPredicted)
+        flROCAUC = skm.roc_auc_score(aTrue, aPredicted)
         plt.plot(aFPR, aTPR, label=(sType + '; area: {0:.3f}'.format(flROCAUC)))
 
     # make a 'chance guessing' line
@@ -150,10 +163,10 @@ if __name__ == '__main__':
 
     #Compare ROCs across Nonlinear, Linear, and deep
     dModelComparison3 = {
-        'NaiveBayes': 'connectivity_basc064',
-        'XGBoost': 'combined_basc197',
-        # 'LinSVM': 'connectivity_basc122',
-        # 'LinLasso': 'combined_basc122',
+        'NaiveBayes': 'connectivity_basc122',
+        'XGBoost': 'combined_basc064',
+        'ExRanTrees': 'combined_basc122',
+        'LinRidge': 'combined_power_2011',
         'Dense': 'combined basc122',
         'BrainNetCNN': 'connectivity basc122'
     }
@@ -174,4 +187,5 @@ if __name__ == '__main__':
         # Fetch the X and Y Test data:
         sTrainDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
         dXData, dXTest, aYData, aYTest = pkl.load(open(sTrainDataPath, 'rb'))
+
         fPlotMultiROC(dPredictions[sKey], sKey, aYTest, sSavePath=(sSaveDir + sKey))

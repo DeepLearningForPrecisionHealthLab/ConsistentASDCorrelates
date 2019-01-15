@@ -1,0 +1,118 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import sklearn.metrics as skm
+import pandas as pd
+import pickle as pkl
+import sys
+import os
+
+def fFetchPredictedROC(sInput, sModel):
+    """
+
+    :param
+    :return:
+    """
+    # Fetch the X and Y Test data:
+    sTrainDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+    dXData, dXTest, aYData, aYTest = pkl.load(open(sTrainDataPath, 'rb'))
+
+    if ('Dense' in sModel) or sModel=='LSTM' or sModel=='BrainNetCNN':
+        sDataPath ='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun'
+        if 'Dense' in sModel:
+            sModel='Dense'
+        sModelPath = os.path.join(sDataPath, sModel)
+
+        pdBestModelNumbers = pkl.load(open(os.path.join(sDataPath, 'BestModelNumbers.p'), 'rb'))
+
+        iModelNum = pdBestModelNumbers.loc[sInput][sModel]
+
+        if iModelNum<10:
+            sModelNum = '0' + str(iModelNum)
+        else:
+            sModelNum = str(iModelNum)
+
+        print(sInput)
+        if not sInput=='anatomy':
+            sCombination, sAtlas = sInput.split()
+        else:
+            sCombination=sInput
+            sAtlas=''
+
+        if not sModel=='BrainNetCNN':
+            sPredicted = os.path.join(sModelPath, sModel + '_' + sModelNum + sCombination + sAtlas +
+                                      'PredictedResults.p')
+        else:
+            sPredicted = os.path.join(sModelPath, sModel + '_' + sModelNum + sAtlas + 'FullModelPredicted.p')
+
+        try:
+            aPredicted = pkl.load(open(sPredicted, 'rb'))
+        except:
+            aPredicted = pkl.load(open(sPredicted, 'rb'), encoding='bytes')
+
+
+    else:
+        sDataPath = "/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Results/3_fold_cv_50_random_" \
+                    "hyperparameter_initializations_random_search0924"
+
+        sModelPath = os.path.join(sDataPath, sInput, sModel + '.p')
+
+        skModel = pkl.load(open(sModelPath, 'rb'))
+
+        if not sInput=='anatomical_only':
+            lsInputSplit= sInput.split('_')
+            sCombination = lsInputSplit[0]
+            if len(lsInputSplit[1:])>1:
+                sAtlas = '_'.join(lsInputSplit[1:])
+            else:
+                sAtlas = lsInputSplit[1]
+
+            aXTest = dXTest[sCombination][sAtlas]
+        else:
+            aXTest = dXTest['anatomy']
+
+        try:
+            aPredicted = np.array(skModel.predict_proba(aXTest))[:,1] #predict vs predict_proba
+        except:
+            aPredicted = np.array(skModel.predict(aXTest))
+
+
+        if not len(aPredicted.shape)>1:
+            aPredicted = np.expand_dims(aPredicted, axis=1)
+
+    flROC = skm.roc_auc_score(aYTest, aPredicted)
+
+    return flROC
+
+if __name__ == '__main__':
+
+    dFullModelComp = {}
+
+    lsInputs=[
+        'anatomical_only', 'connectivity_basc064', 'connectivity_basc122', 'connectivity_basc197',
+        'connectivity_craddock_scorr_mean', 'connectivity_harvard_oxford_cort_prob_2mm', 'connectivity_msdl',
+        'connectivity_power_2011', 'combined_basc064', 'combined_basc122', 'combined_basc197',
+        'combined_craddock_scorr_mean', 'combined_harvard_oxford_cort_prob_2mm', 'combined_msdl',
+        'combined_power_2011'
+    ]
+
+    lsModels=[
+        'NaiveBayes',
+        'RandFor',
+        'ExRanTrees',
+        'AdaBoost',
+        'XGBoost',
+        'GaussSVM',
+        'LinSVM',
+        'LinLasso',
+        'LinRidge'
+    ]
+
+    pdFullModelComp = pd.DataFrame(index=lsInputs, columns=lsModels)
+
+    for sInput in lsInputs:
+        dFullModelComp[sInput]={}
+        for sModel in lsModels:
+            print('Fetching ROC AUC for ' + sModel + ' with inputs: ' + sInput)
+            dFullModelComp[sInput][sModel] = fFetchPredictedROC(sInput, sModel)
+            pdFullModelComp.loc[sInput][sModel] = dFullModelComp[sInput][sModel]
+
