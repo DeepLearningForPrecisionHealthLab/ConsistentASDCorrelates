@@ -46,6 +46,9 @@ for i in range(50):
 
 # Initialize a dataframe to hold results
 pdResults=pd.DataFrame(index=lsAtlases, columns=lsAtlases)
+pdTopModels=pd.DataFrame(index=lsAtlases, columns=lsAtlases)
+
+dTop={}
 
 for root, dirs, files in os.walk(sDataPath):
     files.sort()
@@ -59,8 +62,11 @@ for root, dirs, files in os.walk(sDataPath):
                         if flMeanVal>flMax:
                             flMax=flMeanVal
                             sBest=file[8:]
+                            sModelNum=file[:8]
                 if flMax>0:
                     pdResults.loc[sAtlas2, sAtlas1]=flMax
+                    pdTopModels.loc[sAtlas2, sAtlas1] = sModelNum
+                    dTop.update({sBest: sModelNum})
                     print(sBest, flMax)
 
 #############Non-Anatomical in lower triangle########################
@@ -71,9 +77,15 @@ for root, dirs, files in os.walk(sDataPath):
                         if flMeanVal>flMax:
                             flMax=flMeanVal
                             sBest=file[8:]
+                            sModelNum = file[:8]
                 if flMax>0:
                     pdResults.loc[sAtlas1, sAtlas2]=flMax
+                    pdTopModels.loc[sAtlas1, sAtlas2]=sModelNum
+                    dTop.update({sBest: sModelNum})
                     print(sBest, flMax)
 
 pdMultipleAtlases=pdResults
-pdMultipleAtlases.to_csv('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2Atlases/2AtlasBestModelSummaryAnatUpperTirang')
+pdMultipleAtlases.to_csv('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels'
+                         '/2Atlases/2AtlasBestModelSummaryAnatUpperTriang.csv')
+pdTopModels.to_csv('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2Atlases'
+                   '/2AtlasBestModelNamesAnatUpperTriang.csv')

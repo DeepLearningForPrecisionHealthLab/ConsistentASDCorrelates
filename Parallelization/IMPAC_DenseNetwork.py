@@ -195,7 +195,8 @@ def network_from_ini_2(ini_path, aInputShape=None, compiled=True):
 
 ################################################################################
 
-def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True, b2Atlas=False):
+def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True, b2Atlas=False,
+                        iTestIterations=None, dSpecificInputs=None):
     """
     Runs the network architecture with a specified subset of features
     :param sInputName: a string that describes which input modality is being used, 'anatomy, 'AllAtlases',
@@ -209,22 +210,43 @@ def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEar
         early stopping OR to go for a fixed iEpochs as based off the cross-validation
 
     :param b2Atlas: boolean: should be True if sInput name is '2Atlas' (formats 2-atlas data correctly)
+    :param iTestIterations: number of times to run with different random initializations for error bar production
+        (default=None, no error bar production)
+    :param dSpecificInputs dictionary of specific inputs to be run on of the format:
+        {'sModelNum1':'sAtlas1', 'sModelNum2':'sAtlas2', ...} (eg. {'00', 'craddock_scorr_mean_power_2011'}
     :return: NA
     """
+    # break if only running specific set of models
+    if dSpecificInputs is not None:
+        if iModelNum in dSpecificInputs.keys():
+            sRequiredInput = dSpecificInputs[iModelNum]
+            if sRequiredInput is not sInputName:
+                return None
+        else:
+            return None
 
+    print(f'running model {iModelNum} on input {sInputName}')
     # Initialize variables
     sIni = 'Dense_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/IndividualInputsConfoundsIncluded'
+    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun' \
+                '/PermutationTesting'
 
     if not os.path.isdir(sSavePath):
         os.makedirs(sSavePath, exist_ok=True)
 
+    if os.path.isfile(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +f'RandomIteration{iTestIterations:02}'+
+        'ROCScoreTest.p'):
+        return None
+
     if b2Atlas==True:
         sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData2Atlas.p'
-        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2Atlases'
+        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2AtlasErrors'
     else:
         sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
+
+    if not iTestIterations==None:
+        np.random.seed(iTestIterations)
 
     # Load the master file of the data pre-organized into train, test
     [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
@@ -294,35 +316,41 @@ def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEar
              ]
 
     #perform the 3x cross validation
-    for iCrossVal in range(3):
-        # initialize variables
-        iDataShape = lsXDataSplit[iCrossVal][0][0, :].shape[1]
-        aDataShape = [1, iDataShape, 1]
+    if iTestIterations==None:
+        for iCrossVal in range(3):
+            # initialize variables
+            iDataShape = lsXDataSplit[iCrossVal][0][0, :].shape[1]
+            aDataShape = [1, iDataShape, 1]
 
-        # generate the network for the cross-validation
-        DenseCrossValModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+            # generate the network for the cross-validation
+            DenseCrossValModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
 
-        kerStopping=keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
+            kerStopping=keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
 
-        # Fit the network
-        history=DenseCrossValModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0], validation_data=(lsXVal[iCrossVal][0], lsYVal[iCrossVal][0]), epochs=iEpochs, callbacks=[kerStopping])
+            # Fit the network
+            history=DenseCrossValModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0], validation_data=(lsXVal[iCrossVal][0], lsYVal[iCrossVal][0]), epochs=iEpochs, callbacks=[kerStopping])
 
-        # Score the network
-        aPredicted=DenseCrossValModel.predict(lsXVal[iCrossVal][0])
-        flROCScore=roc_auc_score(lsYVal[iCrossVal][0], aPredicted)
+            # Score the network
+            aPredicted=DenseCrossValModel.predict(lsXVal[iCrossVal][0])
+            flROCScore=roc_auc_score(lsYVal[iCrossVal][0], aPredicted)
 
-        # Save the network Score and history (NOT weights)
-        pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
-                                                                    'ROCScoreCrossVal'+str(iCrossVal+1)+'.p', 'wb'))
+            # Save the network Score and history (NOT weights)
+            pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                                                        'ROCScoreCrossVal'+str(iCrossVal+1)+'.p', 'wb'))
 
-        pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
-                                     'ModelHistoryCrossVal' + str(iCrossVal + 1) + '.p', 'wb'))
+            pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                         'ModelHistoryCrossVal' + str(iCrossVal + 1) + '.p', 'wb'))
 
     #initialize the network for re-training with the whole dataset
     iDataShape=aXData[0,:].shape[1]
     aDataShape=[1,iDataShape,1]
 
     kmModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+
+    # if doing permutation testing, shuffle ground truth column
+    if iTestIterations is not None:
+        np.random.seed(iTestIterations)
+        np.random.shuffle(aYData)
 
     # Set train the network either with the early stopping paradigm or with a set number of epochs
     if bEarlyStopping==True:
@@ -334,6 +362,10 @@ def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEar
     # Predict on the test data
     aPredicted=kmModel.predict(aXTest)
     flROCScore = roc_auc_score(aYTest, aPredicted)
+
+    # Save the iteration number if doing multiple final iterations
+    if iTestIterations is not None:
+        sSubInputName=sSubInputName+f'RandomIteration{iTestIterations:02}'
 
     # Save the model weights and history
     kmModel.save_weights(sSavePath + '/' + sIni + '_' + sInputName + sSubInputName + 'weights.h5')
@@ -417,11 +449,9 @@ def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName='', b2Atl
     return kmModel
 
 if '__main__' == __name__:
-    # Load the data
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
-    [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
 
-    # Fetch the name of the input features and model architecture number from the parallel wrapper
+
+    #Fetch the name of the input features and model architecture number from the parallel wrapper
     # sInfo=sys.argv[1]
     # sInfo=sInfo.split('.')[-2]
     # sModel=sInfo[-2:]
@@ -429,17 +459,81 @@ if '__main__' == __name__:
     # sInputName=sInputName.split('/')[-1]
     # sInputName=sInputName.split(',')[0]
 
-    sModel='00'
+    sModel='47'
+    sInputName='Dense_'
 
-    bCombined=False
+    bCombined=True
+    bValidateErrors=True
+
+    # dModelsToRun={
+    #  'anatomical_basc064_basc122': '32',
+    #  'basc064_basc122': '30',
+    #  'anatomical_basc064_basc197': '25',
+    #  'basc064_basc197': '23',
+    #  'anatomical_basc064_craddock_scorr_mean': '02',
+    #  'basc064_craddock_scorr_mean': '32',
+    #  'anatomical_basc064_harvard_oxford_cort_prob_2mm': '02',
+    #  'basc064_harvard_oxford_cort_prob_2mm': '47',
+    #  'anatomical_basc064_msdl': '04',
+    #  'basc064_msdl': '15',
+    #  'anatomical_basc064_power_2011': '15',
+    #  'basc064_power_2011': '18',
+    #  'anatomical_basc122_basc197': '18',
+    #  'basc122_basc197': '39',
+    #  'anatomical_basc122_craddock_scorr_mean': '02',
+    #  'basc122_craddock_scorr_mean': '22',
+    #  'anatomical_basc122_harvard_oxford_cort_prob_2mm': '30',
+    #  'basc122_harvard_oxford_cort_prob_2mm': '28',
+    #  'anatomical_basc122_msdl': '36',
+    #  'basc122_msdl': '33',
+    #  'anatomical_basc122_power_2011': '15',
+    #  'basc122_power_2011': '02',
+    #  'anatomical_basc197_craddock_scorr_mean': '23',
+    #  'basc197_craddock_scorr_mean': '36',
+    #  'anatomical_basc197_harvard_oxford_cort_prob_2mm': '25',
+    #  'basc197_harvard_oxford_cort_prob_2mm': '22',
+    #  'anatomical_basc197_msdl': '15',
+    #  'basc197_msdl': '15',
+    #  'anatomical_basc197_power_2011': '25',
+    #  'basc197_power_2011': '18',
+    #  'anatomical_craddock_scorr_mean_harvard_oxford_cort_prob_2mm': '36',
+    #  'craddock_scorr_mean_harvard_oxford_cort_prob_2mm': '15',
+    #  'anatomical_craddock_scorr_mean_msdl': '02',
+    #  'craddock_scorr_mean_msdl': '18',
+    #  'anatomical_craddock_scorr_mean_power_2011': '02',
+    #  'craddock_scorr_mean_power_2011': '02',
+    #  'anatomical_harvard_oxford_cort_prob_2mm_msdl': '13',
+    #  'harvard_oxford_cort_prob_2mm_msdl': '10',
+    #  'anatomical_harvard_oxford_cort_prob_2mm_power_2011': '02',
+    #  'harvard_oxford_cort_prob_2mm_power_2011': '36',
+    #  'anatomical_msdl_power_2011': '06',
+    #  'msdl_power_2011': '15'
+    #  }
+
 
     # Train the networks
     if not sInputName =='Dense_':
-        fRunDenseNetOnInput(sInputName, sModel, sSubInputName='2Atlas', iEpochs=500, b2Atlas=True)
+        None
+    #     if not bValidateErrors:
+    #         fRunDenseNetOnInput(sInputName, sModel, sSubInputName='2Atlas', iEpochs=500, b2Atlas=True)
+    #     else:
+    #         if sModel==dModelsToRun[sInputName]:
+    #             for iTestIterations in range(50):
+    #                 fRunDenseNetOnInput(sInputName, sModel, sSubInputName='2Atlas', iEpochs=500, b2Atlas=True,
+    #                                             iTestIterations=iTestIterations)
+
     else:
-        fRunDenseNetOnInput('anatomy', sModel, iEpochs=500)
-        for keys in dXData['connectivity']:
-           fRunDenseNetOnInput('connectivity', sModel, sSubInputName=keys, iEpochs=500)
+        # Load the data
+        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
+        [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+
+        #run the models
+        #fRunDenseNetOnInput('anatomy', sModel, iEpochs=500)
+        #for keys in dXData['connectivity']:
+           #fRunDenseNetOnInput('connectivity', sModel, sSubInputName=keys, iEpochs=500)
         if bCombined:
-            for keys in dXData['combined']:
-                fRunDenseNetOnInput('combined', sModel, sSubInputName=keys, iEpochs=500)
+                # for keys in dXData['combined'].keys():
+                keys= 'basc122'
+                for iTestIteration in range(1000):
+                    fRunDenseNetOnInput('combined', sModel, sSubInputName=keys, iEpochs=500,
+                                        iTestIterations=iTestIteration)

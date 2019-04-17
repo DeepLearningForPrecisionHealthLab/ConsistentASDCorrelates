@@ -38,7 +38,7 @@ rcParams.update({'figure.autolayout': True})
 
 
 # The path where the data is stored
-sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject'
+sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainedModels'
 # The path of the particular run being analysed
 # sTargetDirectory = "anatomical_only_machine_learning_10x_cross_val_50_fold_Rand_Search_ROC_AUC_Metric"
 sTargetDirectory = "msdl_fMRI_connectivity_machine_learning_10x_cross_val_50_fold_Rand_Search_ROC_AUC_Metric"
@@ -162,39 +162,6 @@ def fValPlot(pdValidationScores):
         y = pdValidationScores['skc'+lsX[iModel]][0]
         error = pdValidationScores['skc'+lsX[iModel]][1]
         # Make the names of the ML Algorithms the ticks on the x axis
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

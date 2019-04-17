@@ -13,50 +13,64 @@ import pickle
 import sklearn.metrics as skm
 
 sProjectDirectory = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
-sDeepLearningLocation = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels'
+sDeepLearningLocation = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun'
 sMLModelLocation = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Results/3_fold_cv_50_random_hyperparameter_initializations_random_search0924'
 sSaveLocation = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/MLDeepSummaryData'
 
 # The names of the Deep Learning algorithms used, to label data frame
+# lsDLAlgorithms = [
+#     'Dense Network',
+#     'LSTM Network'
+# ]
+
 lsDLAlgorithms = [
-    'Dense Network',
-    'LSTM Network'
+    'Dense Network'
 ]
 
 #
-lsDLTags = ['Dense', 'LSTM']
+#lsDLTags = ['Dense', 'LSTM']
+lsDLTags = ['Dense']
 
 # The names of the types of input data used, to label data frame
+# lsInputNames = [
+#     'Anatomical Volumetric Data Alone',
+#     'Connectivity using the BASC Atlas with 64 Parcellations',
+#     'Connectivity using the BASC Atlas with 122 Parcellations',
+#     'Connectivity using the BASC Atlas with 197 Parcellations',
+#     'Connectivity using the Craddock Atlas with X Parcellations',
+#     'Connectivity using the Harvard-Oxford Atlas with X Parcellations',
+#     'Connectivity using the MSDL Atlas with X Parcellations',
+#     'Connectivity using the Power Atlas with X Parcellations',
+#     'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 64 Parcellations',
+#     'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations',
+#     'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 197 Parcellations',
+#     'Combined Anatomical Volumetric Data and Connectivity with the Craddock Atlas with X Parcellations',
+#     'Combined Anatomical Volumetric Data and Connectivity with the Harvard-Oxford Atlas with X Parcellations',
+#     'Combined Anatomical Volumetric Data and Connectivity with the MSDL Atlas with X Parcellations',
+#     'Combined Anatomical Volumetric Data and Connectivity with the Power Atlas with X Parcellations',
+# ]
 lsInputNames = [
-    'Anatomical Volumetric Data Alone',
-    'Connectivity using the BASC Atlas with 64 Parcellations',
-    'Connectivity using the BASC Atlas with 122 Parcellations',
-    'Connectivity using the BASC Atlas with 197 Parcellations',
-    'Connectivity using the Craddock Atlas with X Parcellations',
-    'Connectivity using the Harvard-Oxford Atlas with X Parcellations',
-    'Connectivity using the MSDL Atlas with X Parcellations',
-    'Connectivity using the Power Atlas with X Parcellations',
-    'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 64 Parcellations',
     'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations',
-    'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 197 Parcellations',
-    'Combined Anatomical Volumetric Data and Connectivity with the Craddock Atlas with X Parcellations',
-    'Combined Anatomical Volumetric Data and Connectivity with the Harvard-Oxford Atlas with X Parcellations',
-    'Combined Anatomical Volumetric Data and Connectivity with the MSDL Atlas with X Parcellations',
-    'Combined Anatomical Volumetric Data and Connectivity with the Power Atlas with X Parcellations',
 ]
 
 # The tags of the types of input data used, to fetch the data
+# lsInputTags = [
+#     'anatomy', 'connectivitybasc064', 'connectivitybasc122', 'connectivitybasc197',
+#     'connectivitycraddock_scorr_mean', 'connectivityharvard_oxford_cort_prob_2mm', 'connectivitymsdl',
+#     'connectivitypower_2011', 'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
+#     'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
+#     'combinedpower_2011'
+# ]
+
 lsInputTags = [
-    'anatomy', 'connectivitybasc064', 'connectivitybasc122', 'connectivitybasc197',
-    'connectivitycraddock_scorr_mean', 'connectivityharvard_oxford_cort_prob_2mm', 'connectivitymsdl',
-    'connectivitypower_2011', 'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
-    'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
-    'combinedpower_2011'
+    'combinedbasc122'
 ]
 
 # The names of the Metrics used, to label dataFrame
-lsMetrics = ['Accuracy', 'Area Under Precision-Recall Curve',
-             'F1 Score', 'Area Under ROC Curve']
+#lsMetrics = ['Accuracy', 'Area Under Precision-Recall Curve',
+#             'F1 Score', 'Area Under ROC Curve']
+
+lsMetrics = ['Area Under ROC Curve']
 
 # Initialize dictionary to hold data for each DL Framework
 dPerformanceByDLAlg = {}
@@ -65,11 +79,14 @@ dPerformanceByDLAlg = {}
 # contains a dictionary containing the different metrics used and a pandas
 # dataframe. The dataframe has columns for each input (anatomical alone,
 # atlas1, atlas2, etc) and rows for each architecture attempted
+# for sDLAlgorithm in lsDLAlgorithms:
+#     dPerformanceByDLAlg.update({sDLAlgorithm: {lsMetrics[0]: pd.DataFrame(columns=lsInputNames, index=range(50)),
+#                                                lsMetrics[1]: pd.DataFrame(columns=lsInputNames, index=range(50)),
+#                                                lsMetrics[2]: pd.DataFrame(columns=lsInputNames, index=range(50)),
+#                                                lsMetrics[3]: pd.DataFrame(columns=lsInputNames, index=range(50))
+#                                                }})
 for sDLAlgorithm in lsDLAlgorithms:
     dPerformanceByDLAlg.update({sDLAlgorithm: {lsMetrics[0]: pd.DataFrame(columns=lsInputNames, index=range(50)),
-                                               lsMetrics[1]: pd.DataFrame(columns=lsInputNames, index=range(50)),
-                                               lsMetrics[2]: pd.DataFrame(columns=lsInputNames, index=range(50)),
-                                               lsMetrics[3]: pd.DataFrame(columns=lsInputNames, index=range(50))
                                                }})
 
 # This function will calculate a performance metric for a given prediction
@@ -104,16 +121,18 @@ def fCalculateMetric(iMetric, aPredicted):
 
 
 #First, we check if the file has already been saved
-if not os.path.isfile(os.path.join(sProjectDirectory, 'DeepLearningResults')+'.p'):
+if not os.path.isfile(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p'):
     # Now, we loop through the Trial Directory and fill in results if they exist.
     # If the results do not exist, the performance metric is set to 0
     for iDLModel, sDLModel in enumerate(lsDLAlgorithms):
         sDLTag = lsDLTags[iDLModel]
         for iMetric, sMetric in enumerate(lsMetrics):
+            iMetric = 3
             for iInputNumber, sInputName in enumerate(lsInputNames):
                 sInputTag = lsInputTags[iInputNumber]
                 for iTrial in range(50):
-                    sFile = os.path.join(sDeepLearningLocation, sDLTag) + '_' + str(iTrial) + sInputTag + 'PredictedResults.p'
+                    sFile = os.path.join(sDeepLearningLocation,sDLTag, sDLTag) + f'_{iTrial:02}' + sInputTag + \
+                                                                         'PredictedResults.p'
                     if os.path.isfile(sFile):
                         aPredicted = pickle.load(open(sFile, 'rb'))
                         flPerformance = fCalculateMetric(iMetric, aPredicted)
@@ -124,11 +143,11 @@ if not os.path.isfile(os.path.join(sProjectDirectory, 'DeepLearningResults')+'.p
                         print('model ' + sDLModel + ' ' + str(iTrial) + ' failed - ' + sMetric + ' NOT determined')
 
     # Save the summary file
-    pickle.dump(dPerformanceByDLAlg, open(os.path.join(sProjectDirectory, 'Results', 'DeepLearningResults')+'.p', 'wb'))
+    pickle.dump(dPerformanceByDLAlg, open(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p', 'wb'))
 
 # If the summary file already exists, load it
-elif os.path.isfile(os.path.join(sProjectDirectory, 'Results', 'DeepLearningResults')+'.p'):
-    dPerformanceByDLAlg = pickle.load(open(os.path.join(sProjectDirectory, 'Results', 'DeepLearningResults')+'.p', 'rb'))
+elif os.path.isfile(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p'):
+    dPerformanceByDLAlg = pickle.load(open(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p', 'rb'))
 
 
 

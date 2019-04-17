@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#SBATCH --job-name=pairwise_atlas_1101
-#SBATCH --partition=GPUv100
-#SBATCH --nodes=1
-#SBATCH --ntasks=2
+#SBATCH --job-name=pairwise_IMPAC_features_02_07_2019
+#SBATCH --partition=GPUp100
+#SBATCH --nodes=4
+#SBATCH --ntasks=4
 #SBATCH --time=4-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
 #SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_Dense.txt"
@@ -22,7 +22,9 @@ for modelnum in $modelnums
     for key in $keys
     do
         # SRUN arguments
-        CORES_PER_TASK=36
+        CORES_PER_TASK=56
+
+        echo "running $key$modelnum"
 
         cp ./IniFiles/Dense_$modelnum.ini ./IniFiles/Temp/$key$modelnum.ini
 
