@@ -625,7 +625,7 @@ if __name__ == '__main__':
     #                 open(os.path.join(sProjectRootDirectory, sProjectIdentification, 'TrainTestData.p'), 'wb'))
     #
     # else:
-    for sConn in ['PartialCorrelation', 'Covariance', 'Precision', 'LSGC']:#'Correlation', 
+    for sConn in ['Correlation','PartialCorrelation','Covariance','Precision','LSGC']:
         [dXTrain, dXTest, aYTrain, aYTest] = pickle.load(open(os.path.join(sProjectRootDirectory,
             sProjectIdentification,f'AlternateMetrics/{sConn}AllData.p'), 'rb'))
 

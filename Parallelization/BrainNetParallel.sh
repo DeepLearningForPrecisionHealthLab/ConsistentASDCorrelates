@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=BrainNetISBIrepeat
+#SBATCH --job-name=BrainNet_LSGC
 #SBATCH --partition=GPUp100
 #SBATCH --nodes=2
 #SBATCH --ntasks=4
 #SBATCH --time=20-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
-#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_BrainNetISBIRerun.txt"
+#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_BrainNet_MultiConn.txt"
 
 now=$(date +"%m-%d-%Y,%H:%M:%S")
 echo "Job start: $now"
@@ -14,7 +14,7 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=28
+CORES_PER_TASK=56
 
 INPUTS_COMMAND="ls -vr ./IniFiles/B* | shuf"
 

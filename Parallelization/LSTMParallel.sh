@@ -1,12 +1,12 @@
 #!/bin/bash
 
-#SBATCH --job-name=LSTMISBIrerun
+#SBATCH --job-name=LSTM_MultiConn
 #SBATCH --partition=GPUp100
-#SBATCH --nodes=2
+#SBATCH --nodes=1
 #SBATCH --ntasks=2
-#SBATCH --time=3-00:00:00
+#SBATCH --time=6-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
-#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_LSTMISBIRerun.txt"
+#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_LSTM_MultiConn.txt"
 
 now=$(date +"%m-%d-%Y,%H:%M:%S")
 echo "Job start: $now"
@@ -25,7 +25,7 @@ PARALLEL_CMD="parallel --delay .2 -j $SLURM_NTASKS --joblog Logs/$SLURM_JOB_ID.t
 
 # set up the lockfiles, it's important to do it here so it only gets done once!
 module load python/3.6.4-anaconda
-source activate /project/bioinformatics/DLLab/shared/CondaEnvironments/CooperAuttfGPU
+source activate /project/bioinformatics/DLLab/shared/CondaEnvironments/CooperAuttfGPUv4
 LOCK_DIR="Locks/"$SLURM_JOB_ID'_lock_files'
 eval "python /project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/filelock_utilities.py " $SLURM_JOB_NODELIST $LOCK_DIR
 # wait for the above to finish
