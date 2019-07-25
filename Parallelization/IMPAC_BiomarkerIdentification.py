@@ -19,3 +19,10 @@ __author__ = "Cooper Mellema"
 __email__ = "Cooper.Mellema@UTSouthwestern.edu"
 
 __status__ = "Prototype"
+
+import os
+import sys
+import matplotlib.pyplot as plt
+import seaborn as sb
+import pandas as pd
+import numpy as np

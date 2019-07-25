@@ -63,8 +63,11 @@ lsInputNames = [
 # ]
 
 lsInputTags = [
-    'combinedbasc122'
+    'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
+    'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
+    'combinedpower_2011'
 ]
+
 
 # The names of the Metrics used, to label dataFrame
 #lsMetrics = ['Accuracy', 'Area Under Precision-Recall Curve',

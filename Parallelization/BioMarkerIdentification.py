@@ -22,12 +22,18 @@ plt.style.use('dark_background')
 from mpl_toolkits.mplot3d import Axes3D
 import sklearn as sk
 import pickle as pkl
+import dill
 import sklearn.metrics as skm
 import seaborn as sb
 import pandas as pd
 import numpy as np
 import keras as k
+import multiprocessing
+import time
 
+from joblib import Parallel, delayed
+from joblib import parallel_backend
+from joblib import wrap_non_picklable_objects
 from IMPAC_DenseNetwork import read_config_file
 from IMPAC_DenseNetwork import format_dict
 from IMPAC_DenseNetwork import metrics_from_string
@@ -51,11 +57,33 @@ def fPermuteFeature(iPermutationNum, sFeature, pdData):
     pdData2[sFeature] = aData2
     return pdData2
 
-def fTestModelNPermutations(nPermutations, dModel, sKey, sFeature, aActual, pdData):
+def fPerformTest(iPermutationNum, sFeature, pdData, sModelType, cModel, aActual, cOutputter=None):
+    """
+    Performs the predictions in the test
+    :param iPermutationNum: number of the permutation
+    :param sFeature: the name of the feature to be permuted
+    :param pdData: dataframe with the features to be permuted
+    :param sModelType: string, model type (Dense, LSTM, etc)
+    :param cModel: the model objects
+    :param aActual: array Ytrue
+    :param cOutputter: class, outputter class for Neural networks (for speedup)
+    :return:
+    """
+    pdPermutedData = fPermuteFeature(iPermutationNum, sFeature, pdData)
+    aXPrimeData = fExpandDataframe(sModelType, pdPermutedData)
+    if sModelType == 'Dense' or sModelType == 'LSTM':
+        aPredicted = cOutputter([aXPrimeData])[0]
+    elif hasattr(cModel, 'predict_proba'):
+        aPredicted = cModel.predict_proba(aXPrimeData)[:, 0]
+    else:
+        aPredicted = cModel.predict(aXPrimeData)
+    return skm.roc_auc_score(aActual, aPredicted)
+
+def fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData, nParallel=1, cOutputter=None):
     """
     tests a feature in a model for nPermutations permutations
     :param nPermutaions: the number of Permutations to run
-    :param dModel: the data frame containing the model objects
+    :param cModel: the model objects
     :param sKey: the key for the DF of models
     :param sFeature: the name of the feature to be permuted
     :param aActual: array of true values
@@ -64,29 +92,40 @@ def fTestModelNPermutations(nPermutations, dModel, sKey, sFeature, aActual, pdDa
     minus performance with the feature randomly permuted
     """
     # initialize variables and create baseline score
-    aXData = pdData.values
-    aXData = np.expand_dims(aXData, axis=1)
-    aXData = np.expand_dims(aXData, axis=3)
-    aPredicted = dModel.loc[sKey, 'Model'].predict(aXData)
-    try:
-        aPredicted = dModel.loc[sKey,'Model'].predict_proba(pdData.values)[:,0]
-    except:
-        aPredicted = dModel.loc[sKey,'Model'].predict(pdData.values)
+    sModelType=fRetreiveModelType(cModel)
+    aXData=fExpandDataframe(sModelType, pdData)
+
+    if sModelType=='Dense' or sModelType=='LSTM':
+        aPredicted=cOutputter.predict(aXData)
+    elif not hasattr(cModel, 'predict_proba'):
+        aPredicted = cModel.predict(aXData)
+    else:
+        aPredicted = cModel.predict_proba(aXData)[:, 0]
+
+    #Generate baseline score
     flRawScore = skm.roc_auc_score(aActual, aPredicted)
-    lsPermutedScores = []
+
+    print(f'   Feature {sFeature} being permuted.....')
 
     # for each permutation, randomly permute the original features, then predict with the
     # permuted features as inputs
+    lsPermutedFeatues=[]
     for iPermutationNum in range(nPermutations):
-        pdPermutedData = fPermuteFeature(iPermutationNum, sFeature, pdData)
-        aXPrimeData = pdPermutedData.values
-        aXPrimeData = np.expand_dims(aXPrimeData, axis=1)
-        aXPrimeData = np.expand_dims(aXPrimeData, axis=3)
-        try:
-            aPredicted = dModel.loc[sKey, 'Model'].predict_proba(aXPrimeData)[:,0]
-        except:
-            aPredicted = dModel.loc[sKey, 'Model'].predict(aXPrimeData)
-        lsPermutedScores.append(skm.roc_auc_score(aActual, aPredicted))
+        lsPermutedFeatues.append(fExpandDataframe(sModelType, fPermuteFeature(iPermutationNum, sFeature, pdData)))
+
+    # make the predictions in parallel
+    tic=time.clock()
+    if sModelType=='Dense' or sModelType=='LSTM':
+        lsPermutedPredictions=Parallel(n_jobs=nParallel)(delayed(cOutputter.predict)(x)for x in lsPermutedFeatues)
+    else:
+        lsPermutedPredictions=Parallel(n_jobs=nParallel)(delayed(cModel.predict)(x)for x in lsPermutedFeatues)
+    toc=time.clock()
+    print(f'For n_jobs={nParallel}: Time={toc-tic}')
+
+    # put ROC AUC scores in list
+    lsPermutedScores=[]
+    for aPrediction in lsPermutedPredictions:
+        lsPermutedScores.append(skm.roc_auc_score(aActual, aPrediction))
 
     # calculate feature importance (float) as measured by base performance
     # minus performance with the feature randomly permuted
@@ -94,7 +133,7 @@ def fTestModelNPermutations(nPermutations, dModel, sKey, sFeature, aActual, pdDa
 
     return flFeatureImportance
 
-def fPermuteAllFeatures(nPermutations, pdModel, sKey, aActual, pdData):
+def fPermuteAllFeatures(nPermutations, cModel, aActual, pdData):
     """
     tests each feature provided to a model by randomly permuting that feature nPermutations times
     :param nPermutaions: the number of Permutations to run
@@ -108,14 +147,25 @@ def fPermuteAllFeatures(nPermutations, pdModel, sKey, aActual, pdData):
     """
     dFeaturePerformances = {}
 
-    # for each feature, permute nPermutations times and return the value to a dictionary
+    sModelType=fRetreiveModelType(cModel)
+    print(f'Permuting {sModelType} model now')
+
+    # make a compiled predictor for the Neural network
+    if sModelType=='Dense' or sModelType=='LSTM':
+        cPredictor=k.models.Model(inputs=cModel.inputs, outputs=cModel.outputs)
+        cPredictor._make_predict_function()
+    else:
+        cPredictor=None
+
+    # loop through each feature, running N permutations on each feature each time
     for sFeature in pdData.columns:
-        flFeaturePerformance = fTestModelNPermutations(nPermutations, pdModel, sKey, sFeature, aActual, pdData)
+        flFeaturePerformance = fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData,
+                                                       cOutputter=cPredictor)
         dFeaturePerformances.update({sFeature: flFeaturePerformance})
 
     return dFeaturePerformances
 
-def fPermuteAllModels(nPermutations, aActual, pdData, pdModels):
+def fPermuteAllModels(nPermutations, aActual, dData, dModels):
     """
     does permutation tests to each of the models in dModels to determine feature importance
     :param nPermutaions: the number of Permutations to run
@@ -129,23 +179,27 @@ def fPermuteAllModels(nPermutations, aActual, pdData, pdModels):
     dFeatureImportanceByModel = {}
 
     # for each model in the dictionary, calculate the importance per feature via permutation
-    for sModel in list(pdModels.index):
-        dFeatureImportance = fPermuteAllFeatures(nPermutations, pdModels, sModel, aActual, pdData)
-        dFeatureImportanceByModel.update({'{}'.format(pdModels.loc[sModel, 'Model']): dFeatureImportance})
+    for sModel in list(dModels.keys()):
+        dFeatureImportance = fPermuteAllFeatures(nPermutations, dModels[sModel], aActual, dData[sModel])
+        sDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/AtlasResolutionComparison{nPermutations}Permutations'
+        if not os.path.isdir(sDir):
+            os.mkdir(sDir)
+        pkl.dump(dFeatureImportance, open(os.path.join(sDir,f'{sModel}Importances.p'), 'wb'))
+        dFeatureImportanceByModel.update({f'{sModel}': dFeatureImportance})
 
     return dFeatureImportanceByModel
 
-def fPlotFeaturesByImportance(dFeatureImportanceByModel, sFeature, sSavePath=None):
+def fPlotFeaturesByImportance(dFeatureImportanceByModel, sModel, sSavePath=None):
     """
     Plots features sorted by importance
     :param dFeatureImportanceByModel: dictionary of feature importances,
         {sModelType: dFeatureImportance}
-    :param sFeature: string, feature name
+    :param sFeature: string, Model name
     :param sSavePath: string, save location for fig
     :return: plot
     """
     # organize to pd dataframe, then sort data
-    dFeatureImportance = dFeatureImportanceByModel[sFeature]
+    dFeatureImportance = dFeatureImportanceByModel[sModel]
     pdFeatureImportance = pd.DataFrame.from_dict(dFeatureImportance)
     pdFeatureImportance.sort_values(by='col1')
 
@@ -153,12 +207,12 @@ def fPlotFeaturesByImportance(dFeatureImportanceByModel, sFeature, sSavePath=Non
     pdFeatureImportance.plot(kind='bar')
 
     # save if location is provided
-    if sSavePath is not none:
+    if sSavePath is not None:
         plt.savefig(sSavePath)
 
 def fLoadData(sNNType, iModelNum, sInputName, sSubInputName):
     # initialize paths
-    sIni = f'{sNNType}_{iModelNum}'
+    sIni = f'{sNNType}_{iModelNum:02d}'
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
     sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels'
 
@@ -169,8 +223,12 @@ def fLoadData(sNNType, iModelNum, sInputName, sSubInputName):
     # required for generating correct input size
     [dXData, dXTest, aYData, aYTest] = pkl.load(open(sDataPath, 'rb'))
 
-    aXData = dXData[sInputName][sSubInputName]
-    aXTest = dXTest[sInputName][sSubInputName]
+    if not sSubInputName==None:
+        aXData = dXData[sInputName][sSubInputName]
+        aXTest = dXTest[sInputName][sSubInputName]
+    else:
+        aXData = dXData[sInputName]
+        aXTest = dXTest[sInputName]
 
     # The required dimensions for the dense network is size
     # N x H x W x C, where N is the number of samples, C is
@@ -187,9 +245,13 @@ def fLoadData(sNNType, iModelNum, sInputName, sSubInputName):
     aYData = np.float32(aYData)
     aYTest = np.float32(aYTest)
 
+    if sInputName=='connectivity':
+        flCorrectConnectivity=36
+    else:
+        flCorrectConnectivity=0
+
     # initialize the shape of the input layer
-    iDataShape=aXData[0,:].shape[1]-1
-    print(iDataShape)
+    iDataShape=aXData[0,:].shape[1]-1-flCorrectConnectivity
     aDataShape=[1,iDataShape,1]
 
     return aDataShape
@@ -200,7 +262,13 @@ def fLoadNNModel(sNNType, sInputName, sSubInputName, iModelNum):
     #Initialize paths
     sIni = f'{sNNType}_{str(iModelNum).zfill(2)}'
     sIniPath = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/{sIni}.ini'
-    sWeightsPath = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun/{sNNType}/{sNNType}_{iModelNum}_{sInputName}{sSubInputName}weights.h5'
+    # correct format for anatomical data alone
+    if sSubInputName==None:
+        sSelector=''
+    else:
+        sSelector=sSubInputName
+    sWeightsPath = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun' \
+        f'/{sNNType}/{sNNType}_{iModelNum:02d}_{sInputName}{sSelector}weights.h5'
 
     # Load data shape
     aDataShape = fLoadData(sNNType, iModelNum, sInputName, sSubInputName)
@@ -219,33 +287,46 @@ def fLoadPDData():
     sData='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AllDataWithConfounds.p'
     #Dictionary that containes the whole dataset (train and test) in pd dataframe
     [dXData, aYData] = pkl.load(open(sData, 'rb'))
-
     return dXData, aYData
 
 def fLoadShallowModel(sModelType, sModality, sAtlas):
+    # reformat the anatomical selection procedure
+    if sModality=='anatomy':
+        sModality='anatomical'
+        sAtlas='only'
+    sShallowFile=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/SortedShallowModel{sModality}{sAtlas}DF.p'
+    if not os.path.isfile(sShallowFile):
+        # load a pd Dataframe of all the models
+        sShallowModel='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/ShallowModelsDict.p'
+        sShallowModelDF='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/ShallowModelsDF.p'
 
-    # load a pd Dataframe of all the models
-    sShallowModel='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/ShallowModelsDict.p'
-    sShallowModelDF='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/ShallowModelsDF.p'
-    dShallowModels = pkl.load(open(sShallowModel, 'rb'))
-    pdShallowModels = pkl.load(open(sShallowModelDF, 'rb'))
+        # only load dataframes once per session (takes more memory, but is much faster)
+        if not (('dShallowModels' in globals()) and ('pdShallowModels' in globals())):
+            global dShallowModels
+            global pdShallowModels
 
-    #reorganize to match order of NN models
-    dShallow={}
-    dShallow2={}
-    for sKey in dShallowModels.keys():
-        if sKey.__contains__(sModality):
-            dShallow.update({sKey: dShallowModels[sKey]})
-            if sKey.__contains__(sAtlas):
-                dShallow2.update({sKey: dShallowModels[sKey]})
-    pdShallow=pdShallowModels[pdShallowModels.index.str.match(sModality+'_')]
+            dShallowModels = pkl.load(open(sShallowModel, 'rb'))
+            pdShallowModels = pkl.load(open(sShallowModelDF, 'rb'))
+
+        #reorganize to match order of NN models
+        dShallow={}
+        dShallow2={}
+        for sKey in dShallowModels.keys():
+            if sKey.__contains__(sModality):
+                dShallow.update({sKey: dShallowModels[sKey]})
+                if sKey.__contains__(sAtlas):
+                    dShallow2.update({sKey: dShallowModels[sKey]})
+        pdShallow=pdShallowModels[pdShallowModels.index.str.match(sModality+'_')]
+        pkl.dump(pdShallow, open(sShallowFile, 'wb'))
+    else:
+        pdShallow=pkl.load(open(sShallowFile, 'rb'))
 
     # select out the model
     cModel=pdShallow.loc[f'{sModality}_{sAtlas}', f'{sModelType}']
 
     return cModel
 
-def fLoadModels(sModelType, sModality, sAtlas, iModelNum=None):
+def fLoadModels(sModelType, sModality, sAtlas=None, iModelNum=None):
     if not iModelNum==None:
         cModel=fLoadNNModel(sModelType, sModality, sAtlas, iModelNum)
         lsSpecs=[sModelType, sModality, sAtlas, iModelNum]
@@ -255,146 +336,103 @@ def fLoadModels(sModelType, sModality, sAtlas, iModelNum=None):
 
     return cModel, lsSpecs
 
+def fRetreiveModelType(cModel):
+    """
+    Retreives the kind of model being used
+    """
+    if not hasattr(cModel, 'layers'):
+        return 'sklearn'
+    elif 'LSTM' in f"{cModel.layers}":
+        return 'LSTM'
+    else:
+        return 'Dense'
+
+def fExpandDataframe(sModel, pdDataframe):
+    """
+    Reshapes the data for use in the different models
+    :param sModel: 'LSTM', 'Dense', or 'sklearn'
+    :param pdDataframe: pandas dataframe of the data
+    :return: array of the data
+    """
+    if sModel=='Dense':
+        aData=np.expand_dims(np.expand_dims(pdDataframe.values, axis=1),axis=3)
+    elif sModel=='LSTM':
+        aData=np.expand_dims(pdDataframe.values, axis=1)
+    else:
+        aData=pdDataframe.values
+
+    return aData
 
 if '__main__'==__name__:
 
-    # load up the models and the data
-    dModels = {1: [fLoadModels('Dense', 'combined', 'basc122', 39)],
-               2: [fLoadModels('Dense', 'combined', 'basc197', 15)],
-               3: [fLoadModels('LSTM', 'combined', 'basc122', 1)],
-               4: [fLoadModels('LSTM', 'connectivity', 'basc122', 39)],
-               5: [fLoadModels('LinRidge', 'combined', 'basc122')]
-    }
-
     dXData, aYData = fLoadPDData()
 
+    # NOTE, this uses the full model, not the output predictions
+    # load up the models and the data
+    dModels = {
+               'Model1': fLoadModels('Dense', 'connectivity', 'basc064', 46)[0],
+               'Model2': fLoadModels('Dense', 'connectivity', 'basc122', 2)[0],
+               'Model3': fLoadModels('Dense', 'connectivity', 'basc197', 32)[0],
+               'Model4': fLoadModels('LinRidge', 'connectivity', 'basc064')[0],
+               'Model5': fLoadModels('LinRidge', 'connectivity', 'basc122')[0],
+               'Model6': fLoadModels('LinRidge', 'connectivity', 'basc197')[0],
+               'Model7': fLoadModels('Dense', 'combined', 'basc064', 43)[0],
+               'Model8': fLoadModels('Dense', 'combined', 'basc122', 39)[0],
+               'Model9': fLoadModels('Dense', 'combined', 'basc197', 15)[0],
+               'Model10': fLoadModels('LinRidge', 'combined', 'basc064')[0],
+               'Model11': fLoadModels('LinRidge', 'combined', 'basc122')[0],
+               'Model12': fLoadModels('LinRidge', 'combined', 'basc197')[0],
+               'Model13': fLoadModels('Dense', 'anatomy', iModelNum=44)[0],
+               'Model14': fLoadModels('LinRidge', 'anatomy')[0]
+    }
 
+    # Reformat the data to the right form
+    dFormattedXData = {
+        'Model1': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('anatomy') or
+                                                                                   x.__contains__('Site') or
+                                                                                   x.__contains__('Sex(F=1)') or
+                                                                                   x.__contains__('Age'))],axis=1),
+        'Model2': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('anatomy') or
+                                                                                   x.__contains__('Site') or
+                                                                                   x.__contains__('Sex(F=1)') or
+                                                                                   x.__contains__('Age'))],axis=1),
+        'Model3': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('anatomy') or
+                                                                                   x.__contains__('Site') or
+                                                                                   x.__contains__('Sex(F=1)') or
+                                                                                   x.__contains__('Age'))],axis=1),
+        'Model4': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('anatomy') or
+                                                                                   x.__contains__('Site') or
+                                                                                   x.__contains__('Sex(F=1)') or
+                                                                                   x.__contains__('Age'))],axis=1),
+        'Model5': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('anatomy') or
+                                                                                   x.__contains__('Site') or
+                                                                                   x.__contains__('Sex(F=1)') or
+                                                                                   x.__contains__('Age'))],axis=1),
+        'Model6': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('anatomy') or
+                                                                                   x.__contains__('Site') or
+                                                                                   x.__contains__('Sex(F=1)') or
+                                                                                   x.__contains__('Age'))],axis=1),
+        'Model7': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        'Model8': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        'Model9': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        'Model10': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        'Model11': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        'Model12': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        'Model13': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('ROI')or
+                                                                                    x.__contains__('Age'))], axis=1),
+        'Model14': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('ROI')or
+                                                                                    x.__contains__('Age'))], axis=1)
+    }
 
+    # Permute the models
+    nPermutations = 1
+    dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData, dFormattedXData, dModels)
 
-    # # In[7]:
-    #
-    #
-    # dShallow={}
-    # dShallow2={}
-    # for sKey in dShallowModels.keys():
-    #     if sKey.__contains__(sInputName):
-    #         dShallow.update({sKey: dShallowModels[sKey]})
-    #         if sKey.__contains__(sSubInputName):
-    #             dShallow2.update({sKey: dShallowModels[sKey]})
-    # pdShallow=pdShallowModels[pdShallowModels.index.str.match(sInputName+'_')]
-    #
-    #
-    # # In[8]:
-    #
-    #
-    # pdShallow2=pdShallow.loc[f'{sInputName}_{sSubInputName}']
-    # TestData=dXData[sSubInputName]
-    # TestData=TestData.drop(['Age'], axis=1)
-    #
-    #
-    # # In[9]:
-    #
-    #
-    # sk.metrics.roc_auc_score(aYData, pdShallow2.iloc[5].predict(TestData.values))
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    # #pdShallow2=pdShallow2.drop(['NaiveBayes'])
-    # #pdShallow2
-    # pdDeep=pd.DataFrame(index=[f'Dense{iModelNum}'], columns=['Model'])
-    # pdDeep.loc[f'Dense{iModelNum}', 'Model']  =kmModel
-    # pdDeep
-    #
-    #
-    # # In[11]:
-    #
-    #
-    # dXData[sSubInputName].columns.get_loc('Age')
-    #
-    #
-    # # In[12]:
-    #
-    #
-    # XDat=dXData[sSubInputName].drop('Age', axis=1)
-    # XDat=XDat.fillna(0)
-    # aYData=np.nan_to_num(aYData)
-    # np.isnan(XDat.values).any()
-    # np.isnan(aYData).any()
-    # XDat
-    #
-    #
-    # # In[13]:
-    #
-    #
-    # # aPermuted = fPermuteFeature(5,'Site01',XDat)
-    # # #XDat['Site01'].values
-    # # XDat2=XDat.copy()
-    # # XDat2['Site01']=aPermuted
-    # # XDat2['Site01']==XDat['Site01']
-    #
-    #
-    # # In[14]:
-    #
-    #
-    #
-    #
-    # # In[15]:
-    #
-    #
-    # aXData = XDat.values
-    # aXData = np.expand_dims(aXData, axis=1)
-    # aXData = np.expand_dims(aXData, axis=3)
-    # aXData.shape
-    # pdDeep.loc[f'Dense{iModelNum}', 'Model'].predict(aXData)
-    # print('        {}'.format(pdDeep.loc[f'Dense{iModelNum}', 'Model']))
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    # nPermutations=200
-    # dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData, XDat, pdDeep)
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    #
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    # dFeatureImportanceByModel['<keras.engine.sequential.Sequential object at 0x2aab33ee8160>']
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    # sFeature='<keras.engine.sequential.Sequential object at 0x2aab33ee8160>'
-    # dFeatureImportance=dFeatureImportanceByModel[sFeature]
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    # pdFeatureImportance=pd.DataFrame.from_dict(dFeatureImportance, orient='index')
-    # pdFeatureImportance=pdFeatureImportance.sort_values(by=[0], ascending=False)
-    # pdFeatureImportance.head(20).plot(kind='bar')
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    # pdFeatureImportance.head()
-    #
-    #
-    # # In[ ]:
-    #
-    #
-    # #sPermTest1='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Dense47_2FeaturePermutations.p'
-    # sPermTest1='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Dense{iModelNum}_25FeaturePermutations.p'
-    # pkl.dump(pdFeatureImportance, open(sPermTest1, 'wb'))
+    # Save it
+    sSaveDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/'\
+        f'AtlasResolutionComparison{nPermutations}Permutations'
 
+    if not os.path.isdir(sSaveDir): os.mkdir(sSaveDir)
+
+    pkl.dump(dFeatureImportanceByModel, open(os.path.join(
+        sSaveDir,f'AllTSEFeatureImportances{nPermutations}Permutations.p'),'wb'))

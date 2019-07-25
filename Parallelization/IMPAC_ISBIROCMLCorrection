@@ -83,9 +83,64 @@ def fFetchPredictedROC(sInput, sModel):
 
     return flROC
 
+
+def fFetchModel(sInput, sModel):
+    """
+
+    :param
+    :return:
+    """
+    # Fetch the X and Y Test data:
+    sTrainDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+    dXData, dXTest, aYData, aYTest = pkl.load(open(sTrainDataPath, 'rb'))
+
+    if ('Dense' in sModel) or sModel=='LSTM' or sModel=='BrainNetCNN':
+        sDataPath ='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun'
+        if 'Dense' in sModel:
+            sModel='Dense'
+        sModelPath = os.path.join(sDataPath, sModel)
+
+        pdBestModelNumbers = pkl.load(open(os.path.join(sDataPath, 'BestModelNumbers.p'), 'rb'))
+
+        iModelNum = pdBestModelNumbers.loc[sInput][sModel]
+
+        if iModelNum<10:
+            sModelNum = '0' + str(iModelNum)
+        else:
+            sModelNum = str(iModelNum)
+
+        print(sInput)
+        if not sInput=='anatomy':
+            sCombination, sAtlas = sInput.split()
+        else:
+            sCombination=sInput
+            sAtlas=''
+
+        if not sModel=='BrainNetCNN':
+            sPredicted = os.path.join(sModelPath, sModel + '_' + sModelNum + sCombination + sAtlas +
+                                      'PredictedResults.p')
+        else:
+            sPredicted = os.path.join(sModelPath, sModel + '_' + sModelNum + sAtlas + 'FullModelPredicted.p')
+
+        try:
+            aPredicted = pkl.load(open(sPredicted, 'rb'))
+        except:
+            aPredicted = pkl.load(open(sPredicted, 'rb'), encoding='bytes')
+
+
+    else:
+        sDataPath = "/project/bioinformatics/DLLab/Cooper/Results/IMPAC/ShallowLearningResults/3_fold_cv_50_random_" \
+                    "hyperparameter_initializations_random_search0924"
+
+        sModelPath = os.path.join(sDataPath, sInput, sModel + '.p')
+
+        skModel = pkl.load(open(sModelPath, 'rb'))
+
+    return skModel
+
 if __name__ == '__main__':
 
-    dFullModelComp = {}
+    dModels = {}
 
     lsInputs=[
         'anatomical_only', 'connectivity_basc064', 'connectivity_basc122', 'connectivity_basc197',
@@ -107,12 +162,21 @@ if __name__ == '__main__':
         'LinRidge'
     ]
 
-    pdFullModelComp = pd.DataFrame(index=lsInputs, columns=lsModels)
+    # pdFullModelComp = pd.DataFrame(index=lsInputs, columns=lsModels)
+    #
+    # for sInput in lsInputs:
+    #     dFullModelComp[sInput]={}
+    #     for sModel in lsModels:
+    #         print('Fetching ROC AUC for ' + sModel + ' with inputs: ' + sInput)
+    #         dFullModelComp[sInput][sModel] = fFetchPredictedROC(sInput, sModel)
+    #         pdFullModelComp.loc[sInput][sModel] = dFullModelComp[sInput][sModel]
+
+    pdModels = pd.DataFrame(index=lsInputs, columns=lsModels)
 
     for sInput in lsInputs:
-        dFullModelComp[sInput]={}
+        dModels[sInput]={}
         for sModel in lsModels:
-            print('Fetching ROC AUC for ' + sModel + ' with inputs: ' + sInput)
-            dFullModelComp[sInput][sModel] = fFetchPredictedROC(sInput, sModel)
-            pdFullModelComp.loc[sInput][sModel] = dFullModelComp[sInput][sModel]
+            print(f'Fetching top {sModel} with inputs: {sInput}')
+            dModels[sInput][sModel] = fFetchModel(sInput, sModel)
+            pdModels.loc[sInput][sModel] = dModels[sInput][sModel]
 

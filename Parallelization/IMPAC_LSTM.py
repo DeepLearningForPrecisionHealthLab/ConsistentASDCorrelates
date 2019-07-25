@@ -16,8 +16,11 @@ import numpy as np
 import os
 import re
 import sys
+import gc
 import ast
 import keras
+import tensorflow as tf
+import datetime
 import configparser
 from keras import regularizers
 import pandas as pd
@@ -201,7 +204,8 @@ def network_from_ini_2(ini_path, aInputShape=None, compiled=True):
 
 ################################################################################
 
-def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True, b2Atlas=False):
+def fRunLSTMNetOnInput(sInputName, iModelNum, sConnTag, sSubInputName='', iEpochs=1, bEarlyStopping=True,
+                       b2Atlas=False):
     """
     Runs the network architecture with a specified subset of features
     :param sInputName: a string that describes which input modality is being used, 'anatomy, 'AllAtlases',
@@ -221,7 +225,7 @@ def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarl
     # Initialize variables
     sIni = 'LSTM_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun/LSTM'
+    sSavePath = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/{sConnTag}/LSTM'
 
     if not os.path.isdir(sSavePath):
         os.makedirs(sSavePath, exist_ok=True)
@@ -233,7 +237,9 @@ def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarl
         sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
 
     # Load the master file of the data pre-organized into train, test
-    [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+    #[dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+    [dXData, dXTest, aYData, aYTest] = pickle.load(open(os.path.join(
+        '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/', f'AlternateMetrics/{sConnTag}AllData.p'), 'rb'))
 
     # Fetch only the subset of the data with the desired input features
     # (as given by sInputName and sSubInputName)
@@ -350,6 +356,10 @@ def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarl
     pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
                               'ModelHistory.p', 'wb'))
 
+    keras.backend.clear_session()
+    tf.reset_default_graph()
+    gc.collect()
+
 
 #def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True):
 
@@ -396,17 +406,53 @@ def fRunLSTMNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarl
     #
     #
 
-def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName=''):
-    sIni = 'Dense_' + str(iModelNum)
+def fLoadLSTM(sInputName, iModelNum, sSubInputName=''):
+    """
+    Loads a trained network
+    :param sInputName: a string that describes which input modality is being used, 'anatomy, 'AllAtlases',
+        '2Atlas' (all atlases pairwise), or 'combined' for single atlas plus anatomical data
+    :param iModelNum: the number of the architecture being used [0, 49] as initialized in IMPAC_ini_generator.py
+    :param sSubInputName: string: anatomical atlas for the 'combined' condition described in sInputName
+    :return: NA
+    """
+
+    # Initialize variables
+    sIni = 'LSTM_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun/LSTM'
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
+    sSavePath = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Test/LSTM'
 
-    [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
+    if not os.path.isdir(sSavePath):
+        os.makedirs(sSavePath, exist_ok=True)
 
+    # Load the master file of the data pre-organized into train, test
+    #[dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+    [dXData, dXTest, aYData, aYTest] = pickle.load(open(os.path.join(
+        '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/', f'TrainTestDataWithConfounds.p'), 'rb'))
+
+    # Fetch only the subset of the data with the desired input features
+    # (as given by sInputName and sSubInputName)
     if sInputName == 'anatomy':
         aXData = dXData[sInputName]
         aXTest = dXTest[sInputName]
+
+    elif sInputName == 'AllAtlases':
+
+        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/AllAtlases'
+
+        aXData = dXData['anatomy']
+        aXTest = dXTest['anatomy']
+
+        for key in dXData['connectivity'].keys():
+            if (not key == 'basc064') and (not key == 'basc197'):
+                aXData = np.append(aXData, np.array(dXData['connectivity'][key]), axis=1)
+                aXTest = np.append(aXTest, np.array(dXTest['connectivity'][key]), axis=1)
+            else:
+                None
+
+    elif sSubInputName == '2Atlas':
+        aXData = dXData[sInputName]
+        aXTest = dXTest[sInputName]
+
     else:
         aXData = dXData[sInputName][sSubInputName]
         aXTest = dXTest[sInputName][sSubInputName]
@@ -415,32 +461,63 @@ def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName=''):
     # N x I x D, where N is the number of samples,
     # I is the number of inputs and D is the
     # spatial dimensions for each sample.
-    aXData = np.expand_dims(aXData, axis=2)
+    aXData = np.expand_dims(aXData, axis=1)
 
-    aXTest = np.expand_dims(aXTest, axis=2)
+    aXTest = np.expand_dims(aXTest, axis=1)
 
-    iDataShape = aXData[0, :].shape[2]
+    aXData = np.float32(aXData)
+    aXTest = np.float32(aXTest)
+    aYData = np.float32(aYData)
+    aYTest = np.float32(aYTest)
 
-    kmModel = network_from_ini_2(sIniPath, aInputShape=iDataShape)
+    # Initialize for splitting for 3x cross validation
+    iSplitSize = int(aXData.shape[0] / 3)
 
-    kmModel.load_weights(sWeightsPath)
+    # Split the Data for 3x cross validation
+    lsXDataSplit = [[aXData[iSplitSize:, :, :]],  # skip over beginning
+                    [np.append(aXData[:iSplitSize, :, :], aXData[2 * iSplitSize:, :, :], axis=0)],  # split over middle
+                    [aXData[:2 * iSplitSize, :, :]]  # skip over end
+                    ]
+    lsYDataSplit = [[aYData[iSplitSize:, :]],  # skip over beginning
+                    [np.append(aYData[:iSplitSize, :], aYData[2 * iSplitSize:, :], axis=0)],  # split over middle
+                    [aYData[:2 * iSplitSize, :]]  # skip over end
+                    ]
+    lsXVal = [[aXData[:iSplitSize, :, :]],  # include only beginning
+              [aXData[iSplitSize:2 * iSplitSize, :, :]],  # include only middle
+              [aXData[2 * iSplitSize:, :, :]]  # include only end
+              ]
+    lsYVal = [[aYData[:iSplitSize, :]],  # include only beginning
+              [aYData[iSplitSize:2 * iSplitSize, :]],  # include only middle
+              [aYData[2 * iSplitSize:, :]]  # include only end
+              ]
+
+    # initialize the network for re-training with the whole dataset
+    iDataShape = aXData[0, :].shape[1]
+    aDataShape = [1, iDataShape]
+
+    kmModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+    kmModel.load_weights(f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels'
+                         f'/ISBIRerun/LSTM/LSTM_{iModelNum}_{sInputName}{sSubInputName}weights.h5')
 
     return kmModel
 
-
 if '__main__' == __name__:
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData.p'
-    [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
+    for sConn in ['Correlation', 'PartialCorrelation', 'Covariance', 'Precision', 'LSGC']:
+        [dXTrain, dXTest, aYTrain, aYTest] = pickle.load(open(os.path.join(
+            '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/', f'AlternateMetrics/{sConn}AllData.p'), 'rb'))
 
-    try:
+    # sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/LSGCData_DefaultParams.p'
+    # [dXData, dXTest, aYData, aYtest] = pickle.load(open(sDataPath, 'rb'))
+
         iModel = sys.argv[1]
         iModel = iModel.split('_')[1]
         iModel = iModel.split('.')[0]
-    except:
-        iModel='00'
 
-    fRunLSTMNetOnInput('anatomy', iModel, iEpochs=500)
-    for keys in dXData['connectivity']:
-        fRunLSTMNetOnInput('connectivity', iModel, sSubInputName=keys, iEpochs=500)
-    for keys in dXData['combined']:
-        fRunLSTMNetOnInput('combined', iModel, sSubInputName=keys, iEpochs=500)
+
+        fRunLSTMNetOnInput('anatomy', iModel, sConn, iEpochs=500)
+        for keys in dXTrain['connectivity']:
+            fRunLSTMNetOnInput('connectivity', iModel, sConn, sSubInputName=keys, iEpochs=500)
+        for keys in dXTrain['combined']:
+            fRunLSTMNetOnInput('combined', iModel, sConn, sSubInputName=keys, iEpochs=500)
+        del(dXTrain, dXTest, aYTrain, aYTest)
+        gc.collect()

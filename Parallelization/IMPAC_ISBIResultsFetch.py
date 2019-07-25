@@ -147,10 +147,23 @@ for sNetwork in lsNetworks:
                 dResults[sNetwork][sPrefix][sAtlas]['Avg CV ROC AUC'] == flMaxCV].tolist()[0]
             flTestVal = dResults[sNetwork][sPrefix][sAtlas]['Test ROC AUC'][iLoc]
 
-        pdFinalResults.loc[sIndex][sNetwork] = flTestVal
+        pdFinalResults.loc[sIndex][sNetwork] = flMaxCV
         pdFinalModelNumbers.loc[sIndex][sNetwork] = iLoc
 
 pickle.dump(pdFinalResults, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
                                  '/TrainedModels/ISBIRerun/BestROCAUCSummary.p', 'wb'))
 pickle.dump(pdFinalModelNumbers, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
                                  '/TrainedModels/ISBIRerun/BestModelNumbers.p', 'wb'))
+
+# Fetch the top ten best architectures per model
+dTopTen = {}
+dTopTen['Dense'] = {}
+dTopTen['LSTM'] = {}
+for sAtlas in ['basc064', 'basc122', 'basc197', 'craddock_scorr_mean', 'power_2011']:
+    dTopTen['Dense'].update({sAtlas: list(dResults['Dense']['combined'][sAtlas].sort_values('Avg CV ROC AUC',
+                                                   ascending=False).index[0:10])})
+    dTopTen['LSTM'].update({sAtlas: list(dResults['LSTM']['combined'][sAtlas].sort_values('Avg CV ROC AUC',
+                                                   ascending=False).index[0:10])})
+
+pickle.dump(dTopTen, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
+                                 '/TrainedModels/ISBIRerun/TopTens.p', 'wb'))

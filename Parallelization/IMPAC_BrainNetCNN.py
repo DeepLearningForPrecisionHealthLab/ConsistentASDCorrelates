@@ -27,6 +27,8 @@ import numpy as np
 import ast
 import configparser
 import pickle
+import datetime
+import numpy as np
 import sklearn.metrics as skm
 
 # import subprocess
@@ -165,55 +167,51 @@ def fReshapeUpperTriangVectToSquare(aXVect):
 
     return aXSquare
 
-def fReshapeInputData(aXData):
+def fReshapeInputData(aXData, sConn=None):
     # Reshapes the input data from an array with many upper triangular vectors
-    # (N X L) to an array of shape N X H X W, N is the number of samples, L is
+    # (N X L) to an array of shape N X C x H X W, N is the number of samples, L is
     # the length of the upper-triagular matrix taht has been vecotrized and, H
-    # and W are the spatial dimensions for each sample.
+    # and W are the spatial dimensions for each sample. (C is number of channels=1)
     iXSamples=aXData.shape[0]
     iXVectLen=aXData.shape[1]
-    iSquareDim=int((-1 + np.sqrt(1 + 8 * iXVectLen)) / 2)
+    # if flattened upper triangular...
+    if not sConn=='LSTM':
+        iSquareDim=int((-1 + np.sqrt(1 + 8 * iXVectLen)) / 2)
+    # if flattened entire square...
+    else:
+        iSquareDim = int(aXData.shape[1] ** (1 / 2))
 
-    aXNew = np.zeros((iXSamples, iSquareDim, iSquareDim))
+    aXNew = np.zeros((iXSamples, 1, iSquareDim, iSquareDim))
     for iSample in range(iXSamples):
-        aXNew[iSample, :, :] = fReshapeUpperTriangVectToSquare(aXData[iSample, :])
+        if not sConn=='LSTM':
+            aXNew[iSample, :, :, :] = fReshapeUpperTriangVectToSquare(aXData[iSample, :])
+        else:
+            aXNew[iSample, :, :, :] = np.reshape(aXData[0,:], (iSquareDim, iSquareDim))
 
     return aXNew
 
-def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpochs=1, bEarlyStopping=True):
+def fRunBrainNetCNNOnInput(sInputName, iModelNum, aXTrain, aXTest,
+                                   aYTrain, aYTest, sSubInputName='', iEpochs=1, bEarlyStopping=True, sConn=None):
 
     sIni = 'BrainNetCNN_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun' \
-                '/BrainNetCNN'
+    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/'+ sConn + '/BrainNetCNN'
+    if not os.path.isdir(sSavePath):
+        os.mkdir(sSavePath)
 
-    if not os.path.isfile(sSavePath + '/' + sIni + sInputName + "FullModelNetwork.p"):
-
-        dXData = dData['dXData']
-        dXTest = dData['dXTest']
-        aYData = dData['aYData']
-        aYTest = dData['aYtest']
-
-        if sInputName =='anatomy':
-            aXData = fReshapeInputData(dXData[sInputName])
-            aXTest = fReshapeInputData(dXTest[sInputName])
-        else:
-            aXData = fReshapeInputData(dXData[sInputName][sSubInputName])
-            aXTest = fReshapeInputData(dXTest[sInputName][sSubInputName])
-
+    if not os.path.isfile(os.path.join(sSavePath, sIni) + sSubInputName + 'FullModelPredicted.p'):
 
         # The required dimensions for the BrainNetCNN network is size
         # N x C X H x W, where N is the number of samples, C is
         # the number of channels in each sample, and, H and W are the
         # spatial dimensions for each sample. So, we expand the Channels
         # Dimension to 1
-        aXData = np.expand_dims(aXData, axis=1)
-
-        aXTest = np.expand_dims(aXTest, axis=1)
+        aXData=fReshapeInputData(aXTrain, sConn=sConn)
+        aXTest=fReshapeInputData(aXTest, sConn=sConn)
 
         aXData = np.float32(aXData)
         aXTest = np.float32(aXTest)
-        aYData = np.float32(aYData)
+        aYData = np.float32(aYTrain)
         aYTest = np.float32(aYTest)
 
         aDataShape = [aXData.shape[2], aXData.shape[3]]
@@ -295,7 +293,19 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpoc
             BrainNetCNNModel.pars['test_interval'] = 50
             BrainNetCNNModel.pars['snapshot'] = 100 #100
 
-            BrainNetCNNModel.fit(aXData, aYData, aXTest, aYTest)
+            bFlag=True
+            iTries=0
+            #Try to fit up to 10 times
+            while bFlag==True:
+                try:
+                    BrainNetCNNModel.fit(aXData, aYData, aXTest, aYTest)
+                    bFlag=False
+                except ResourceWarning:
+                    print "Trying again, tried to save simultaneously..."
+                    iTries=iTries+1
+                    if iTries>10:
+                        bFlag=False
+
             aPredicted = BrainNetCNNModel.predict(aXTest)
 
             pickle.dump(aPredicted, open(os.path.join(sSavePath, sIni) + sSubInputName + 'FullModelPredicted.p',
@@ -327,39 +337,49 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, dData, sSubInputName='', iEpoc
 
 
 if '__main__' == __name__:
-    sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataPy2.pkl'
-    dData = pickle.load(open(sDataPath, 'rb'))
+    for sConn in ['Correlation', 'PartialCorrelation', 'Covariance', 'Precision', 'LSGC']:
 
-    bTest=False
+        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject' \
+                    '/AlternateMetrics/'+sConn+'AllDataPy2.pkl'
+        dXTrain, dXTest, aYTrain, aYTest = pickle.load(open(sDataPath, 'rb'))
 
-    if not bTest==True:
-        iModel = sys.argv[1]
-        iModel = iModel.split('_')[1]
-        iModel = iModel.split('.')[0]
+        bTest=False
 
-        sInputName = 'connectivity'
+        if bTest==False:
+            iModel = sys.argv[1]
+            iModel = iModel.split('_')[1]
+            iModel = iModel.split('.')[0]
 
-        for sAtlas in dData['dXData'][sInputName]:
-            print 'running ' + sAtlas + ' atlas'
+            sInputName = 'connectivity'
 
-
-            fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
-
-
-    else:
-        for iModel in range(50):
-
-            if iModel<10:
-                iModel='0'+str(iModel)
-            else:
-                iModel=str(iModel)
-
-            sInputName='connectivity'
-
-            for sAtlas in dData['dXData'][sInputName]:
+            for sAtlas in dXTrain['connectivity']:
                 print 'running ' + sAtlas + ' atlas'
 
-                fRunBrainNetCNNOnInput(sInputName, iModel, dData, sSubInputName=sAtlas)
+
+                fRunBrainNetCNNOnInput(sInputName, iModel, dXTrain['connectivity'][sAtlas], dXTest['connectivity'][sAtlas],
+                                       aYTrain, aYTest, sSubInputName=sAtlas, sConn=sConn)
+
+
+        else:
+            for iModel in range(50):
+
+                if iModel<10:
+                    iModel='0'+str(iModel)
+                else:
+                    iModel=str(iModel)
+
+                sInputName='connectivity'
+
+                sInputName = 'connectivity'
+
+                for sAtlas in dXTrain['connectivity']:
+                    print 'running ' + sAtlas + ' atlas'
+
+                    fRunBrainNetCNNOnInput(sInputName, iModel, dXTrain['connectivity'][sAtlas],
+                                           dXTest['connectivity'][sAtlas],
+                                           aYTrain, aYTest, sSubInputName=sAtlas)
+
+
 
 
 

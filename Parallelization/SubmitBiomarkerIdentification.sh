@@ -4,7 +4,7 @@
 #SBATCH --partition=GPUp100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --time=4-00:00:00
+#SBATCH --time=8-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
 #SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_Biomarker_Identification.txt"
 

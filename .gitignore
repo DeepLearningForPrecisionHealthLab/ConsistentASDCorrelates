@@ -3,6 +3,14 @@
 /ISBI Paper All
 /Autism_IMPAC_Git_Restored
 /Parallelization/TrainedModels/
+/Parallelization/*.png
+*.png
+/Parallelization/*.p
+*.p
+*.pkl
+lsGC/
+/lsGC/
+MSDLFileList.csv
 # Files over 4mb
 /Parallelization/Logs/
 /Parallelization/TrainedModels/
@@ -13,6 +21,8 @@ TrainTestData.p
 .ipynb_checkpoints/
 *.xlsx
 *.pdf
+__pycache__/
+/__pycache__/
 /Parallelization/Locks/
 /Parallelization/__init__.py
 /Parallelization/__pycache__/
@@ -27,6 +37,8 @@ TrainTestData.p
 /Parallelization/CutStacked.png
 /Parallelization/CutStackedBrief.png
 /Parallelization/ECExamplePt.p
+/AlternateMetrics/
+/AlternateMetrics/*
 /Parallelization/IMPAC_DCM_TapasToolbox.mlx
 /Parallelization/ROITimeseries.p
 /Parallelization/ROITimeseriesTest.p

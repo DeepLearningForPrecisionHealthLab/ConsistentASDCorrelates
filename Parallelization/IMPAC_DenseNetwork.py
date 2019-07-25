@@ -15,11 +15,14 @@ Sept 2018
 import numpy as np
 import os
 import re
+import gc
 import sys
 import ast
 import keras
+import datetime
 import configparser
 from keras import regularizers
+import tensorflow as tf
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 import pickle
@@ -196,7 +199,7 @@ def network_from_ini_2(ini_path, aInputShape=None, compiled=True):
 ################################################################################
 
 def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEarlyStopping=True, b2Atlas=False,
-                        iTestIterations=None, dSpecificInputs=None):
+                        iTestIterations=None, dSpecificInputs=None, sConnTag=None):
     """
     Runs the network architecture with a specified subset of features
     :param sInputName: a string that describes which input modality is being used, 'anatomy, 'AllAtlases',
@@ -229,151 +232,157 @@ def fRunDenseNetOnInput(sInputName, iModelNum, sSubInputName='', iEpochs=1, bEar
     # Initialize variables
     sIni = 'Dense_' + str(iModelNum)
     sIniPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/IniFiles/' + sIni + '.ini'
-    sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun' \
-                '/PermutationTesting'
+    sSavePath = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/{sConnTag}/Dense'
 
-    if not os.path.isdir(sSavePath):
-        os.makedirs(sSavePath, exist_ok=True)
+    if not os.path.isfile(os.path.join(sSavePath, f'{sIni}{sInputName}{sSubInputName}ModelHistory.p')):
 
-    if os.path.isfile(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +f'RandomIteration{iTestIterations:02}'+
-        'ROCScoreTest.p'):
-        return None
+        if not os.path.isdir(sSavePath):
+            os.makedirs(sSavePath, exist_ok=True)
 
-    if b2Atlas==True:
-        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData2Atlas.p'
-        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2AtlasErrors'
-    else:
-        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
+        # if os.path.isfile(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +f'RandomIteration{iTestIterations:02}'+
+        #     'ROCScoreTest.p'):
+        #     return None
 
-    if not iTestIterations==None:
-        np.random.seed(iTestIterations)
+        if b2Atlas==True:
+            sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestData2Atlas.p'
+            sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/2AtlasErrors'
+        else:
+            sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
 
-    # Load the master file of the data pre-organized into train, test
-    [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+        if not iTestIterations==None:
+            np.random.seed(iTestIterations)
 
-    # Fetch only the subset of the data with the desired input features
-    # (as given by sInputName and sSubInputName)
-    if sInputName =='anatomy':
-        aXData = dXData[sInputName]
-        aXTest = dXTest[sInputName]
+        # Load the master file of the data pre-organized into train, test
+        [dXData, dXTest, aYData, aYTest] = pickle.load(open(os.path.join(
+                    '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/',f'AlternateMetrics/{sConn}AllData.p'),'rb'))
 
-    elif sInputName =='AllAtlases':
+        # Fetch only the subset of the data with the desired input features
+        # (as given by sInputName and sSubInputName)
+        if sInputName =='anatomy':
+            aXData = dXData[sInputName]
+            aXTest = dXTest[sInputName]
 
-        sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/AllAtlases'
+        elif sInputName =='AllAtlases':
 
-        aXData = dXData['anatomy']
-        aXTest = dXTest['anatomy']
+            sSavePath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/AllAtlases'
 
-        for key in dXData['connectivity'].keys():
-            if (not key=='basc064') and (not key=='basc197'):
-                aXData = np.append(aXData, np.array(dXData['connectivity'][key]), axis=1)
-                aXTest = np.append(aXTest, np.array(dXTest['connectivity'][key]), axis=1)
-            else:
-                None
+            aXData = dXData['anatomy']
+            aXTest = dXTest['anatomy']
 
-    elif sSubInputName=='2Atlas':
-        aXData=dXData[sInputName]
-        aXTest=dXTest[sInputName]
+            for key in dXData['connectivity'].keys():
+                if (not key=='basc064') and (not key=='basc197'):
+                    aXData = np.append(aXData, np.array(dXData['connectivity'][key]), axis=1)
+                    aXTest = np.append(aXTest, np.array(dXTest['connectivity'][key]), axis=1)
+                else:
+                    None
 
-    else:
-        aXData = dXData[sInputName][sSubInputName]
-        aXTest = dXTest[sInputName][sSubInputName]
+        elif sSubInputName=='2Atlas':
+            aXData=dXData[sInputName]
+            aXTest=dXTest[sInputName]
 
-    # The required dimensions for the dense network is size
-    # N x H x W x C, where N is the number of samples, C is
-    # the number of channels in each sample, and, H and W are the
-    # spatial dimensions for each sample.
-    aXData = np.expand_dims(aXData, axis=1)
-    aXData = np.expand_dims(aXData, axis=3)
+        else:
+            aXData = dXData[sInputName][sSubInputName]
+            aXTest = dXTest[sInputName][sSubInputName]
 
-    aXTest = np.expand_dims(aXTest, axis=1)
-    aXTest = np.expand_dims(aXTest, axis=3)
+        # The required dimensions for the dense network is size
+        # N x H x W x C, where N is the number of samples, C is
+        # the number of channels in each sample, and, H and W are the
+        # spatial dimensions for each sample.
+        aXData = np.expand_dims(aXData, axis=1)
+        aXData = np.expand_dims(aXData, axis=3)
 
-    aXData = np.float32(aXData)
-    aXTest = np.float32(aXTest)
-    aYData = np.float32(aYData)
-    aYTest = np.float32(aYTest)
+        aXTest = np.expand_dims(aXTest, axis=1)
+        aXTest = np.expand_dims(aXTest, axis=3)
 
-    # Initialize for splitting for 3x cross validation
-    iSplitSize = int(aXData.shape[0]/3)
+        aXData = np.float32(aXData)
+        aXTest = np.float32(aXTest)
+        aYData = np.float32(aYData)
+        aYTest = np.float32(aYTest)
 
-    # Split the Data for 3x cross validation
-    lsXDataSplit = [[aXData[iSplitSize:,:,:,:]], # skip over beginning
-                    [np.append(aXData[:iSplitSize,:], aXData[2*iSplitSize:,:], axis=0)], #split over middle
-                    [aXData[:2*iSplitSize,:,:,:]] # skip over end
-                    ]
-    lsYDataSplit = [[aYData[iSplitSize:,:]], # skip over beginning
-                    [np.append(aYData[:iSplitSize,:], aYData[2*iSplitSize:,:], axis=0)], #split over middle
-                    [aYData[:2*iSplitSize,:]] # skip over end
-                    ]
-    lsXVal =[[aXData[:iSplitSize,:,:,:]], # include only beginning
-             [aXData[iSplitSize:2*iSplitSize,:,:,:]], # include only middle
-             [aXData[2*iSplitSize:,:,:,:]] # include only end
-             ]
-    lsYVal =[[aYData[:iSplitSize,:]], # include only beginning
-             [aYData[iSplitSize:2*iSplitSize,:]], # include only middle
-             [aYData[2*iSplitSize:,:]] # include only end
-             ]
+        # Initialize for splitting for 3x cross validation
+        iSplitSize = int(aXData.shape[0]/3)
 
-    #perform the 3x cross validation
-    if iTestIterations==None:
-        for iCrossVal in range(3):
-            # initialize variables
-            iDataShape = lsXDataSplit[iCrossVal][0][0, :].shape[1]
-            aDataShape = [1, iDataShape, 1]
+        # Split the Data for 3x cross validation
+        lsXDataSplit = [[aXData[iSplitSize:,:,:,:]], # skip over beginning
+                        [np.append(aXData[:iSplitSize,:], aXData[2*iSplitSize:,:], axis=0)], #split over middle
+                        [aXData[:2*iSplitSize,:,:,:]] # skip over end
+                        ]
+        lsYDataSplit = [[aYData[iSplitSize:,:]], # skip over beginning
+                        [np.append(aYData[:iSplitSize,:], aYData[2*iSplitSize:,:], axis=0)], #split over middle
+                        [aYData[:2*iSplitSize,:]] # skip over end
+                        ]
+        lsXVal =[[aXData[:iSplitSize,:,:,:]], # include only beginning
+                 [aXData[iSplitSize:2*iSplitSize,:,:,:]], # include only middle
+                 [aXData[2*iSplitSize:,:,:,:]] # include only end
+                 ]
+        lsYVal =[[aYData[:iSplitSize,:]], # include only beginning
+                 [aYData[iSplitSize:2*iSplitSize,:]], # include only middle
+                 [aYData[2*iSplitSize:,:]] # include only end
+                 ]
 
-            # generate the network for the cross-validation
-            DenseCrossValModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+        #perform the 3x cross validation
+        if iTestIterations==None:
+            for iCrossVal in range(3):
+                # initialize variables
+                iDataShape = lsXDataSplit[iCrossVal][0][0, :].shape[1]
+                aDataShape = [1, iDataShape, 1]
 
+                # generate the network for the cross-validation
+                DenseCrossValModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+
+                kerStopping=keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
+
+                # Fit the network
+                history=DenseCrossValModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0], validation_data=(lsXVal[iCrossVal][0], lsYVal[iCrossVal][0]), epochs=iEpochs, callbacks=[kerStopping])
+
+                # Score the network
+                aPredicted=DenseCrossValModel.predict(lsXVal[iCrossVal][0])
+                flROCScore=roc_auc_score(lsYVal[iCrossVal][0], aPredicted)
+
+                # Save the network Score and history (NOT weights)
+                pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                                                            'ROCScoreCrossVal'+str(iCrossVal+1)+'.p', 'wb'))
+
+                pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                             'ModelHistoryCrossVal' + str(iCrossVal + 1) + '.p', 'wb'))
+
+        #initialize the network for re-training with the whole dataset
+        iDataShape=aXData[0,:].shape[1]
+        aDataShape=[1,iDataShape,1]
+
+        kmModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
+
+        # if doing permutation testing, shuffle ground truth column
+        if iTestIterations is not None:
+            np.random.seed(iTestIterations)
+            np.random.shuffle(aYData)
+
+        # Set train the network either with the early stopping paradigm or with a set number of epochs
+        if bEarlyStopping==True:
             kerStopping=keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
+            history=kmModel.fit(aXData, aYData, epochs=iEpochs, callbacks=[kerStopping])
+        else:
+            history=kmModel.fit(aXData, aYData, epochs=iEpochs)
 
-            # Fit the network
-            history=DenseCrossValModel.fit(lsXDataSplit[iCrossVal][0], lsYDataSplit[iCrossVal][0], validation_data=(lsXVal[iCrossVal][0], lsYVal[iCrossVal][0]), epochs=iEpochs, callbacks=[kerStopping])
+        # Predict on the test data
+        aPredicted=kmModel.predict(aXTest)
+        flROCScore = roc_auc_score(aYTest, aPredicted)
 
-            # Score the network
-            aPredicted=DenseCrossValModel.predict(lsXVal[iCrossVal][0])
-            flROCScore=roc_auc_score(lsYVal[iCrossVal][0], aPredicted)
+        # Save the iteration number if doing multiple final iterations
+        if iTestIterations is not None:
+            sSubInputName=sSubInputName+f'RandomIteration{iTestIterations:02}'
 
-            # Save the network Score and history (NOT weights)
-            pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
-                                                                        'ROCScoreCrossVal'+str(iCrossVal+1)+'.p', 'wb'))
+        # Save the model weights and history
+        kmModel.save_weights(sSavePath + '/' + sIni + '_' + sInputName + sSubInputName + 'weights.h5')
+        pickle.dump(aPredicted, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName + 'PredictedResults.p', 'wb'))
+        pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                     'ROCScoreTest.p', 'wb'))
+        pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
+                                  'ModelHistory.p', 'wb'))
 
-            pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
-                                         'ModelHistoryCrossVal' + str(iCrossVal + 1) + '.p', 'wb'))
-
-    #initialize the network for re-training with the whole dataset
-    iDataShape=aXData[0,:].shape[1]
-    aDataShape=[1,iDataShape,1]
-
-    kmModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
-
-    # if doing permutation testing, shuffle ground truth column
-    if iTestIterations is not None:
-        np.random.seed(iTestIterations)
-        np.random.shuffle(aYData)
-
-    # Set train the network either with the early stopping paradigm or with a set number of epochs
-    if bEarlyStopping==True:
-        kerStopping=keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=10, restore_best_weights=True)
-        history=kmModel.fit(aXData, aYData, epochs=iEpochs, callbacks=[kerStopping])
-    else:
-        history=kmModel.fit(aXData, aYData, epochs=iEpochs)
-
-    # Predict on the test data
-    aPredicted=kmModel.predict(aXTest)
-    flROCScore = roc_auc_score(aYTest, aPredicted)
-
-    # Save the iteration number if doing multiple final iterations
-    if iTestIterations is not None:
-        sSubInputName=sSubInputName+f'RandomIteration{iTestIterations:02}'
-
-    # Save the model weights and history
-    kmModel.save_weights(sSavePath + '/' + sIni + '_' + sInputName + sSubInputName + 'weights.h5')
-    pickle.dump(aPredicted, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName + 'PredictedResults.p', 'wb'))
-    pickle.dump(flROCScore, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
-                                 'ROCScoreTest.p', 'wb'))
-    pickle.dump(history, open(os.path.join(sSavePath, sIni) + sInputName + sSubInputName +
-                              'ModelHistory.p', 'wb'))
+    keras.backend.clear_session()
+    tf.reset_default_graph()
+    gc.collect()
 
 def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName='', b2Atlas=False):
     """
@@ -439,7 +448,8 @@ def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName='', b2Atl
     aYTest = np.float32(aYTest)
 
     # initialize the shape of the input layer
-    iDataShape=aXData[0,:].shape[1]
+    iDataShape=aXData[0,:].shape[1]-1
+    print(iDataShape)
     aDataShape=[1,iDataShape,1]
 
     # create the model architecture, then load the weights
@@ -448,19 +458,20 @@ def fReproduceModel(sInputName, iModelNum, sWeightsPath, sSubInputName='', b2Atl
 
     return kmModel
 
+
 if '__main__' == __name__:
 
 
     #Fetch the name of the input features and model architecture number from the parallel wrapper
-    # sInfo=sys.argv[1]
-    # sInfo=sInfo.split('.')[-2]
-    # sModel=sInfo[-2:]
-    # sInputName=sInfo[:-2]
-    # sInputName=sInputName.split('/')[-1]
-    # sInputName=sInputName.split(',')[0]
+    sInfo=sys.argv[1]
+    sInfo=sInfo.split('.')[-2]
+    sModel=sInfo[-2:]
+    sInputName=sInfo[:-2]
+    sInputName=sInputName.split('/')[-1]
+    sInputName=sInputName.split(',')[0]
 
-    sModel='47'
-    sInputName='Dense_'
+    # sModel='47'
+    # sInputName='Dense_'
 
     bCombined=True
     bValidateErrors=True
@@ -523,17 +534,22 @@ if '__main__' == __name__:
     #                                             iTestIterations=iTestIterations)
 
     else:
-        # Load the data
-        sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/TrainTestDataWithConfounds.p'
-        [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
+        for sConn in ['Correlation', 'PartialCorrelation', 'Covariance', 'Precision', 'LSGC']:
+            [dXTrain, dXTest, aYTrain, aYTest] = pickle.load(open(os.path.join(
+                '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/',f'AlternateMetrics/{sConn}AllData.p'),'rb'))
+        # # Load the data
+        # sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/LSGCData_DefaultParams.p'
+        # [dXData, dXTest, aYData, aYTest] = pickle.load(open(sDataPath, 'rb'))
 
-        #run the models
-        #fRunDenseNetOnInput('anatomy', sModel, iEpochs=500)
-        #for keys in dXData['connectivity']:
-           #fRunDenseNetOnInput('connectivity', sModel, sSubInputName=keys, iEpochs=500)
-        if bCombined:
-                # for keys in dXData['combined'].keys():
-                keys= 'basc122'
-                for iTestIteration in range(1000):
-                    fRunDenseNetOnInput('combined', sModel, sSubInputName=keys, iEpochs=500,
-                                        iTestIterations=iTestIteration)
+            #run the models
+            fRunDenseNetOnInput('anatomy', sModel, iEpochs=500, sConnTag=sConn)
+            for keys in dXTrain['connectivity']:
+               fRunDenseNetOnInput('connectivity', sModel, sSubInputName=keys, iEpochs=500, sConnTag=sConn)
+            if bCombined:
+                    for keys in dXTrain['combined'].keys():
+                        #for iTestIteration in range(1000):
+                        fRunDenseNetOnInput('combined', sModel, sSubInputName=keys, iEpochs=500, sConnTag=sConn)
+                                                #,iTestIterations=iTestIteration)
+
+            del(dXTrain, dXTest, aYTrain, aYTest)
+            gc.collect()
