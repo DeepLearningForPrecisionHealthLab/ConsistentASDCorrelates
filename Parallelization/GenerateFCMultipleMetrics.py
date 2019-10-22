@@ -127,7 +127,7 @@ def fFetchFMRIData(fMRIDataNames, sFile,
 if "__main__"==__name__:
 
     # Set location
-    # sRoot = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject'
+    sRoot = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject'
     # lsAllDataWithConfounds = pickle.load(open(os.path.join(sRoot, 'AllDataWithConfounds.p'), 'rb'))
     # lsAtlases=list(lsAllDataWithConfounds[0].keys())
 
@@ -136,13 +136,15 @@ if "__main__"==__name__:
     dPartialCorr={'ConnectivityMetric': 'partial correlation'}
     dCov={'ConnectivityMetric': 'covariance'}
     dPrecision={'ConnectivityMetric': 'precision'}
+    dTSE = {'ConnectivityMetric': 'tangent'}
 
     # make into list to iterate over
     lsConnOptions=[
         dCorr,
         dPartialCorr,
         dCov,
-        dPrecision
+        dPrecision,
+        dTSE
     ]
 
     ###############  fMRI  ###############
@@ -173,3 +175,5 @@ if "__main__"==__name__:
         dTotalConnectivity = fFetchFMRIData(fMRIData, f'{sTag.capitalize()}ConnectivityData', **dConnOption,
                                             ConnectivityVector=True)
         dDataByConnType.update({sTag: dTotalConnectivity})
+
+    pickle.dump(dDataByConnType,open(os.path.join(sRoot, 'AllNewConnectivities_v2.p'), 'wb'))

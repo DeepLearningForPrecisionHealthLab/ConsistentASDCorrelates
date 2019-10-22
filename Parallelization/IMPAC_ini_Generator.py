@@ -11,9 +11,9 @@ import random
 
 np.random.seed(42)
 
-bNewDense=False
+bNewDense=True
 bNewLSTM=False
-bNewBrainNet=True
+bNewBrainNet=False
 bNewStack=False
 
 # Initialize the directories where the ini files will be stored
@@ -22,7 +22,7 @@ def fInitialize():
     sProjectRootDirectory = "/project/bioinformatics/DLLab/Cooper/Code"
     sProjectIdentification = "AutismProject/Parallelization"
 
-    sTargetDirectory = os.path.join(sProjectRootDirectory, sProjectIdentification, 'IniFiles')
+    sTargetDirectory = os.path.join(sProjectRootDirectory, sProjectIdentification, 'PostErrorAnalysisIniFiles')
 
     if not os.path.exists(sTargetDirectory):
         os.makedirs(sTargetDirectory)
@@ -37,15 +37,22 @@ sTargetDirectory = fInitialize()
 
 # Create a dictionary of hyperparameters to randomly select from
 
+### original Hyperparameters ###
+# dHyperParam = {
+#     'hidden_layers': [1, 2, 3],
+#     'bottom_layer_width': [16, 32, 64, 128, 256],
+#     'Dropout': np.random.uniform(0.1, 0.6, 10),
+#     'l2_regularization': 10 ** np.random.uniform(-4, -2, 10)
+# }
+### refined hyperparameters after error analysis ###
 dHyperParam = {
-    'hidden_layers': [1, 2, 3],
-    'bottom_layer_width': [16, 32, 64, 128, 256],
-    'Dropout': np.random.uniform(0.1, 0.6, 10),
-    'regularization': 10 ** np.random.uniform(-4, -2, 10)
+    'hidden_layers': [1, 2],
+    'bottom_layer_width': np.random.uniform(32, 128, 1000),
+    'Dropout': np.random.uniform(0.3, 0.8, 1000),
+    'l1_l2_regularization': [10 ** np.random.uniform(-5, -3, 1000),10 ** np.random.uniform(-3, -1, 1000)]
 }
 
-
-def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
+def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam, iIniFileNumber): #Input shape?
     """ Adapted from Alex Treacher's network_functions code by Cooper Mellema
     Makes semi random config file for a keras network, designed around the IMPAC Autism Project.
     Creates a 2 class network architecture with a hyperparameter set in the space defined by the
@@ -56,25 +63,43 @@ def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
     :return: None
     """
 
-    # Create 50 .ini files
-    for iRandomInitialization in range(50):
+    # Create iIniFileNumber .ini files
+    for iRandomInitialization in range(iIniFileNumber):
         random.seed(iRandomInitialization)
         sIni = 'Dense_' + str(iRandomInitialization)
 
         iLayers = random.choice(dHyperParam['hidden_layers'])
-        iBottomLayerWidth = random.choice(dHyperParam['bottom_layer_width'])
+        iBottomLayerWidth = int(random.choice(dHyperParam['bottom_layer_width']))
         flDropout = random.choice(dHyperParam['Dropout'])
-        flRegularizer = random.choice(dHyperParam['regularization'])
+
+        #determine regularization params
+        for sKey in dHyperParam.keys():
+            if 'regularization' in sKey:
+                if 'l1' in sKey.lower():
+                    sL1='l1_'
+                else:
+                    sL1=''
+                if 'l2' in sKey.lower():
+                    sL2='l2_'
+                else:
+                    sL2=''
+
+        # pick regulariztion values
+        lsRegularizer=[random.choice(dHyperParam[f'{sL1}{sL2}regularization'][x])
+                       for x in range(len(dHyperParam[f'{sL1}{sL2}regularization']))]
+
 
         #Initialize the ini file with ConfigParser
         config = ConfigParser()
-        config['model'] = {'class': 'Sequential', 'loss': 'binary_crossentropy'}
+        config['model'] = {'class': 'Sequential',
+                           'loss': 'binary_crossentropy',
+                           'metrics': ['acc', 'auc_roc']}
 
         # Create the input layer
         config['layer/input'] = {'class': 'Dense',
                                  # 'input_shape': str(aInputShape),#[len of vect, 1, 1 channel]
                                  'units': str(iBottomLayerWidth),
-                                 'regularizer': str(flRegularizer),
+                                 f'{sL1}{sL2}regularization': str(lsRegularizer),
                                  'activation': 'relu',
                                  'alpha': str(0.3)
                                  }
@@ -88,14 +113,14 @@ def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
             config['layer/Dense{}'.format(i)] = {'class': 'Dense',
                                              'units': int(iBottomLayerWidth/(i+1)),
                                              'activation': 'relu',
-                                             'regularizer': str(flRegularizer),
+                                             f'{sL1}{sL2}regularization': str(lsRegularizer),
                                              'alpha': str(0.3)
                                              }
 
         # Create the decision layer
         config['layer/Dense{}'.format(i+1)] = {'class': 'Dense',
                                            'units': 1,
-                                           'regularizer': str(flRegularizer),
+                                           f'{sL1}{sL2}regularization': str(lsRegularizer),
                                            'activation': 'sigmoid'
                                            }
 
@@ -109,7 +134,7 @@ def fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
             config.write(configfile)
 
 if bNewDense:
-    fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam)
+    fGenerateDenseNetworkINIs(sTargetDirectory, dHyperParam, 500)
 
 ##############################################################################
 # Initialize the ini files for the LSTM Neural network
@@ -140,7 +165,7 @@ def fGenerateLSTMNetworkINIs(sTargetDirectory, dHyperParam): #Input shape?
         sIni = 'LSTM_' + str(iRandomInitialization)
 
         iLayers = random.choice(dHyperParam['hidden_layers'])
-        iBottomLayerWidth = random.choice(dHyperParam['bottom_layer_width'])
+        iBottomLayerWidth = int(random.choice(dHyperParam['bottom_layer_width']))
         flDropout = random.choice(dHyperParam['Dropout'])
         #flGradientClipping = random.choice(dHyperParam['gradient_clipping'])
         flRegularizer = random.choice(dHyperParam['regularization'])

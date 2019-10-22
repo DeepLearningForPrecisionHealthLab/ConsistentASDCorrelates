@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=EnsemblingModels
-#SBATCH --partition=GPUp100 
+#SBATCH --partition=256GBv1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=8-00:00:00
@@ -14,7 +14,7 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=112
+CORES_PER_TASK=56
 
 # Setup to run
 module load python/3.6.4-anaconda

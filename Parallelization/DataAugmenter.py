@@ -38,6 +38,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.linear_model import RidgeClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.cross_decomposition import PLSRegression
+from IMPAC_DenseNetwork import fRunDenseNetOnInput_v2
 np.random.seed(42)
 
 
@@ -50,7 +51,12 @@ class cDataAugmenter:
         :param dXAdditionalData:
             NOTE: This should be pre-normalized
         """
+        # set data
         self.dXData = dXTimeseriesData
+        if dXAdditionalData is not None:
+            self.dXAdditionalData = dXAdditionalData
+
+        # initialize decomposition method
         self.sDecomp = sDecomp
         if sDecomp == 'PCA':
             cDimReducer = PCA()
@@ -58,6 +64,8 @@ class cDataAugmenter:
             cDimReducer = FastICA()
         elif sDecomp == 'PLS-DA':
             cDimReducer = PLSRegression(n_components=2)#dXTimeseriesData[list(dXTimeseriesData.keys())[0]].shape[1])
+
+        # Fit dimension reducer
         self.fFitDimReducer(cDimReducer, dXTimeseriesData, dYData)
         self.fPopulateLatentSpace(dXTimeseriesData)
 
@@ -90,6 +98,8 @@ class cDataAugmenter:
 
     def _fInverseTransform(self, aReduced):
         aProjectedToRealSpace = np.dot(aReduced, self.cSubspace.components)
+
+        return aProjectedToRealSpace
 
     def fPopulateLatentSpace(self, dXTimeseriesData):
         """
@@ -226,7 +236,7 @@ def fLoadSubjects(lsSubjects):
     for iSubject in lsSubjects:
         sSubjectPath = f'{sRoot}/{iSubject}/run_1/{iSubject}_task-Rest_confounds.csv'
         try:
-            pdControl = pd.DataFrame.from_csv(sSubjectPath, header=None, index_col=None)
+            pdControl = pd.read_csv(sSubjectPath, header=None, index_col=None)
             cScaler = StandardScaler()
             dSubjects.update({f'{iSubject}': cScaler.fit_transform(pdControl.values)})
         except:
@@ -264,12 +274,14 @@ if __name__ == '__main__':
     """
     #######
     # Set parameters for augmentation
-    lsSamples = [50000]#[500, 1000, 5000, 10000, 25000, 50000]
+    lsSamples = [500, 1000, 5000, 10000, 25000, 50000]#[500, 1000, 5000, 10000, 25000, 50000]
     lsDecomp = ['PCA', 'ICA']#['PCA', 'ICA','PLS-DA']
-    lsNoiseTo = ['None', 'finaltimeseries','components','both']
+    lsNoiseTo = ['None', 'finaltimeseries','components','both']#['None', 'finaltimeseries','components','both']
     iSplits = 3
     lsCombos = list(itertools.product(*[lsSamples, lsDecomp, lsNoiseTo]))
     #lsCombos.insert(0, (0, 'None', 'None')) #(a control to insert)
+    iMaxEpochs=300
+    os.nice(5)
     pdAugmentationResults = pd.DataFrame(
         index=range(len(lsCombos)),
         columns=[
@@ -278,15 +290,20 @@ if __name__ == '__main__':
             'Noise in components',
             'Number of additional samples',
             'Which',
-            'Train AUC ROC',
-            'Train std. error',
+            'Validation Train Acc',
+            'Validation Train std. error',
+            'Validation Acc',
+            'Validation Acc std. error',
             'Validation AUC ROC',
-            'Validation std. error',
-            'Test AUC ROC',
-            'Generalization Error',
+            'Validation AUC ROC std. error',
+            'Final Train Acc',
+            'Final Test AUC ROC',
+            'Generalization Error (Val-Te ROC AUC)'
     ])
     #######
     for iAugExperiment, (iSamples, sDecomp, sNoiseTo) in enumerate(lsCombos):
+        sSavePath=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/Augmented/' \
+            f'{sDecomp}Decomposition_{sNoiseTo.title()}Noise_{iSamples}xAugmented'
         pdAugmentationResults.loc[iAugExperiment]['Augmentation Method']= sDecomp
         pdAugmentationResults.loc[iAugExperiment]['Noise in timeseries'] = 1 if (sNoiseTo=='both' or
                                                                              sNoiseTo=='finaltimeseries') else 0
@@ -297,10 +314,10 @@ if __name__ == '__main__':
 
         # load data
         sRoot = '/project/bioinformatics/DLLab/STUDIES/Autism_IMPAC/autism-master/data/fmri/msdl'
-        pdSubjects = pd.DataFrame.from_csv('/project/bioinformatics/DLLab/STUDIES/Autism_IMPAC/autism-master/data'
+        pdSubjects = pd.read_csv('/project/bioinformatics/DLLab/STUDIES/Autism_IMPAC/autism-master/data'
                                            '/participants.csv')
-        lsASD = pdSubjects[pdSubjects['asd'] == 1].index.tolist()
-        lsControls = pdSubjects[pdSubjects['asd'] == 0].index.tolist()
+        lsASD = list(pdSubjects[pdSubjects['asd'] == 1]['subject_id'].values)
+        lsControls = list(pdSubjects[pdSubjects['asd'] == 0]['subject_id'].values)
 
         # Tr Te split
         lsASDTe = lsASD[int(len(lsASD)*0.8):]
@@ -492,54 +509,93 @@ if __name__ == '__main__':
         cAugmentedIterator = iter(lsAugIterator)
 
         # Perform classification
-        cClassifier = RidgeClassifier()
-        dParamDistributions = {
-            'alpha': 10 ** np.random.uniform(-5, 1, 100),
-            'max_iter': np.random.uniform(1000, 100000, 100),
-        }
-        cAugRandomSearch = RandomizedSearchCV(
-            cClassifier,
-            dParamDistributions,
-            cv=cAugmentedIterator,
-            n_iter=50,
-            n_jobs=1,
-            verbose=0,
-            scoring='roc_auc',
-            refit=False
-        )
-        # Fit on each set of the cross-validated data
-        cAugRandomSearch.fit(aAugX, aAugY)
-
-        # refit where TSE was calculated across ALL data AND new augmented data for ALL is used
-        pdBestAugParams = pd.DataFrame(cAugRandomSearch.cv_results_)
-        dBestAugParams = pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['params'].iloc[0]
-        cAugRefittedModel = RidgeClassifier(**dBestAugParams)
+        # cClassifier = RidgeClassifier()
+        # dParamDistributions = {
+        #     'alpha': 10 ** np.random.uniform(-5, 1, 100),
+        #     'max_iter': np.random.uniform(1000, 100000, 100),
+        # }
+        # cAugRandomSearch = RandomizedSearchCV(
+        #     cClassifier,
+        #     dParamDistributions,
+        #     cv=cAugmentedIterator,
+        #     n_iter=50,
+        #     n_jobs=1,
+        #     verbose=0,
+        #     scoring='roc_auc',
+        #     refit=False
+        # )
+        # # Fit on each set of the cross-validated data
+        # # cAugRandomSearch.fit(aAugX, aAugY)
+        #
+        # # refit where TSE was calculated across ALL data AND new augmented data for ALL is used
+        # pdBestAugParams = pd.DataFrame(cAugRandomSearch.cv_results_)
+        # dBestAugParams = pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['params'].iloc[0]
+        # cAugRefittedModel = RidgeClassifier(**dBestAugParams)
         if sDecomp!='None':
-            cAugRefittedModel.fit(
-                np.concatenate((aAllTSE, aAllAugTSE), axis=0), np.concatenate((aYAll, aYAllAug), axis=0)
-            )
+            lsAccTr = [None,None,None]
+            lsAccVal = [None,None,None]
+            lsROCAUCVal = [None,None,None]
+            iCV=0
+            for idxTr, idxTe in cAugmentedIterator:
+                aXTr = aAugX[idxTr]
+                aXTe = aAugX[idxTe]
+                aYTr = aAugY[idxTr]
+                aYTe = aAugY[idxTe]
+                flROCAUC, cHistory = fRunDenseNetOnInput_v2('Dense', 8, sSavePath, iEpochs=iMaxEpochs,
+                                        sIniPath=None, aXTr=aXTr, aYTr=aYTr, aXTe=aXTe, aYTe=aYTe, bCV=True,
+                                                            sTag=f'CV{iCV}')
+                idxBestCV = np.where(cHistory.history['val_acc']==np.max(cHistory.history['val_acc']))[0][0]
+                lsAccTr[iCV] = cHistory.history['acc'][idxBestCV]
+                lsAccVal[iCV] = cHistory.history['val_acc'][idxBestCV]
+                lsROCAUCVal[iCV] = flROCAUC
+                iCV+=1
+            # cAugRefittedModel.fit(
+            #     np.concatenate((aAllTSE, aAllAugTSE), axis=0), np.concatenate((aYAll, aYAllAug), axis=0)
+            # )
+            aXTr = np.concatenate((aAllTSE, aAllAugTSE), axis=0)
+            aXTe = aAllTSETe
+            aYTr = np.concatenate((aYAll, aYAllAug), axis=0)
+            aYTe = aYAllTe
+            flROCAUC, cHistory = fRunDenseNetOnInput_v2('Dense', 8, sSavePath, iEpochs=iMaxEpochs,
+                                                        sIniPath=None, aXTr=aXTr, aYTr=aYTr, aXTe=aXTe, aYTe=aYTe,
+                                                        bCV=False, sTag=f'Full')
+            flAcc = cHistory.history['acc'][np.where(cHistory.history['acc']==np.max(cHistory.history['acc']))[0][0]]
         else:
-            cAugRefittedModel.fit(aAllTSE, aYAll)
-        flAugScore = roc_auc_score(aYAllTe, fSoftmax(cAugRefittedModel.decision_function(aAllTSETe)))
-        print(f'Score with augmentation of {2*iSamples} ({iSamples} controls, {iSamples} ASD) in {sDecomp} space:\n'
-              f'(Noise method={sNoiseTo})\n'
-              f'Mean Train score: {cAugRandomSearch.cv_results_["mean_train_score"][0]:.3f}+/-{cAugRandomSearch.cv_results_["std_train_score"][0]:.3f}\n'
-              f'Mean CV score:{cAugRandomSearch.cv_results_["mean_test_score"][0]:.3f}+/-{cAugRandomSearch.cv_results_["std_test_score"][0]:.3f}'
-              f'\nTest score: {flAugScore:.3f}'
-              f'\nGeneralization Error: {(cAugRandomSearch.cv_results_["mean_train_score"][0]-cAugRandomSearch.cv_results_["mean_test_score"][0]):.3f}'
-              )
+            print('Have not built Non-augmented method yet')
 
-        pdAugmentationResults.loc[iAugExperiment]['Train AUC ROC'] = \
-            pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['mean_train_score'].values[0]
-        pdAugmentationResults.loc[iAugExperiment]['Train std. error'] = \
-            pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['std_train_score'].values[0]
-        pdAugmentationResults.loc[iAugExperiment]['Validation AUC ROC'] = \
-            pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['mean_test_score'].values[0]
-        pdAugmentationResults.loc[iAugExperiment]['Validation std. error'] =\
-            pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['std_test_score'].values[0]
-        pdAugmentationResults.loc[iAugExperiment]['Test AUC ROC'] = flAugScore
-        pdAugmentationResults.loc[iAugExperiment]['Generalization Error'] = pdAugmentationResults.loc[iAugExperiment]['Train AUC ROC']-\
-                                                                        pdAugmentationResults.loc[iAugExperiment]['Validation AUC ROC']
-
+        # Fill augmentation table
+        pdAugmentationResults.loc[iAugExperiment]['Validation Train Acc'] = np.mean(np.array(lsAccTr))
+        pdAugmentationResults.loc[iAugExperiment]['Validation Train std. error'] = np.std(np.array(lsAccTr))
+        pdAugmentationResults.loc[iAugExperiment]['Validation Acc'] = np.mean(np.array(lsAccVal))
+        pdAugmentationResults.loc[iAugExperiment]['Validation Acc std. error'] =np.std(np.array(lsAccVal))
+        pdAugmentationResults.loc[iAugExperiment]['Validation AUC ROC'] = np.mean(np.array(lsROCAUCVal))
+        pdAugmentationResults.loc[iAugExperiment]['Validation AUC ROC std. error'] = np.std(np.array(lsROCAUCVal))
+        pdAugmentationResults.loc[iAugExperiment]['Final Train Acc'] = flAcc
+        pdAugmentationResults.loc[iAugExperiment]['Final Test AUC ROC'] = flROCAUC
+        pdAugmentationResults.loc[iAugExperiment]['Generalization Error (Val-Te ROC AUC)'] =\
+            np.mean(np.array(lsROCAUCVal))-flROCAUC
+    #        cAugRefittedModel.fit(aAllTSE, aYAll)
+    #
+    #     flAugScore = roc_auc_score(aYAllTe, fSoftmax(cAugRefittedModel.decision_function(aAllTSETe)))
+    #     print(f'Score with augmentation of {2*iSamples} ({iSamples} controls, {iSamples} ASD) in {sDecomp} space:\n'
+    #           f'(Noise method={sNoiseTo})\n'
+    #           f'Mean Train score: {cAugRandomSearch.cv_results_["mean_train_score"][0]:.3f}+/-{cAugRandomSearch.cv_results_["std_train_score"][0]:.3f}\n'
+    #           f'Mean CV score:{cAugRandomSearch.cv_results_["mean_test_score"][0]:.3f}+/-{cAugRandomSearch.cv_results_["std_test_score"][0]:.3f}'
+    #           f'\nTest score: {flAugScore:.3f}'
+    #           f'\nGeneralization Error: {(cAugRandomSearch.cv_results_["mean_train_score"][0]-cAugRandomSearch.cv_results_["mean_test_score"][0]):.3f}'
+    #           )
+    #
+    #     pdAugmentationResults.loc[iAugExperiment]['Train AUC ROC'] = \
+    #         pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['mean_train_score'].values[0]
+    #     pdAugmentationResults.loc[iAugExperiment]['Train std. error'] = \
+    #         pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['std_train_score'].values[0]
+    #     pdAugmentationResults.loc[iAugExperiment]['Validation AUC ROC'] = \
+    #         pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['mean_test_score'].values[0]
+    #     pdAugmentationResults.loc[iAugExperiment]['Validation std. error'] =\
+    #         pdBestAugParams.loc[pdBestAugParams['rank_test_score'] == 1]['std_test_score'].values[0]
+    #     pdAugmentationResults.loc[iAugExperiment]['Test AUC ROC'] = flAugScore
+    #     pdAugmentationResults.loc[iAugExperiment]['Generalization Error'] = pdAugmentationResults.loc[iAugExperiment]['Train AUC ROC']-\
+    #                                                                     pdAugmentationResults.loc[iAugExperiment]['Validation AUC ROC']
+    #
     pkl.dump(pdAugmentationResults, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
-                                            '/DataAugmentation/pdTestResults_100k.p','wb'))
+                                            '/DataAugmentation/pdTestResults_Dense8_Test.p','wb'))

@@ -389,36 +389,36 @@ if '__main__'==__name__:
     # Get indices of Training and test data
     aTrainingIndex, aTestIndex = fSplit(aAutLabel, pdConfounders, pdSMRIData, dlsGCReduced)
     #
-    # #Load data
-    # sRoot = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject'
-    # dDataByConnType=pkl.load(open(os.path.join(sRoot, 'AllNewConnectivities.p'), 'rb'))
-    #
-    # #Rename features
-    # dDataByConnType=fRenameConn(dDataByConnType)
-    #
-    # #Add lsGC to processing
-    # dDataByConnType.update({'LSGC': dlsGCReduced})
-    #
-    # # Sort Train/Test for each type
-    # for sKey in dDataByConnType.keys():
-    #     # cut out train/test data
-    #     dXTrain, dXTest, aYTrain, aYTest = fOrganizeToDict(pdConfounders, pdSMRIData, dDataByConnType[sKey],
-    #                                                        aAutLabel, lsAtlases, aTrainingIndex, aTestIndex, sType=sKey)
-    #     # fill in Nan's
-    #     for sAtlas in dXTrain['connectivity']:
-    #         sFlag='connectivity'
-    #         print(f'{sKey},{sAtlas} number of NAN: {np.sum(np.isnan(dXTrain[sFlag][sAtlas]))}')
-    #         print(f'{sKey},{sAtlas} number of NAN: {np.sum(np.isnan(dXTest[sFlag][sAtlas]))}')
-    #         dXTrain[sFlag][sAtlas]=np.nan_to_num(dXTrain[sFlag][sAtlas])
-    #         dXTest[sFlag][sAtlas]=np.nan_to_num(dXTest[sFlag][sAtlas])
-    #
-    #     # dump into directory
-    #     # Dump data into directory
-    #     pkl.dump([dXTrain, dXTest, aYTrain, aYTest],
-    #              open(f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/{sKey}AllData.p',
-    #                   'wb'))
-    #
-    #
+    #Load data
+    sRoot = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject'
+    dDataByConnType=pkl.load(open(os.path.join(sRoot, 'AllNewConnectivities_v2.p'), 'rb'))
+
+    #Rename features
+    dDataByConnType=fRenameConn(dDataByConnType)
+
+    #Add lsGC to processing
+    dDataByConnType.update({'LSGC': dlsGCReduced})
+
+    # Sort Train/Test for each type
+    for sKey in dDataByConnType.keys():
+        # cut out train/test data
+        dXTrain, dXTest, aYTrain, aYTest = fOrganizeToDict(pdConfounders, pdSMRIData, dDataByConnType[sKey],
+                                                           aAutLabel, lsAtlases, aTrainingIndex, aTestIndex, sType=sKey)
+        # fill in Nan's
+        for sAtlas in dXTrain['connectivity']:
+            sFlag='connectivity'
+            print(f'{sKey},{sAtlas} number of NAN: {np.sum(np.isnan(dXTrain[sFlag][sAtlas]))}')
+            print(f'{sKey},{sAtlas} number of NAN: {np.sum(np.isnan(dXTest[sFlag][sAtlas]))}')
+            dXTrain[sFlag][sAtlas]=np.nan_to_num(dXTrain[sFlag][sAtlas])
+            dXTest[sFlag][sAtlas]=np.nan_to_num(dXTest[sFlag][sAtlas])
+
+        # dump into directory
+        # Dump data into directory
+        pkl.dump([dXTrain, dXTest, aYTrain, aYTest],
+                 open(f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/{sKey}AllData.p',
+                      'wb'))
+
+
 
 
 

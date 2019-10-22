@@ -50,7 +50,8 @@ lsDLTags = ['Dense']
 #     'Combined Anatomical Volumetric Data and Connectivity with the Power Atlas with X Parcellations',
 # ]
 lsInputNames = [
-    'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations',
+    # 'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations',
+    'Connectivity using the MSDL Atlas with X Parcellations'
 ]
 
 # The tags of the types of input data used, to fetch the data
@@ -63,11 +64,12 @@ lsInputNames = [
 # ]
 
 lsInputTags = [
-    'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
-    'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
-    'combinedpower_2011'
+#     'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
+#     'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
+#     'combinedpower_2011'
+# ]
+    'connectivitymsdl'
 ]
-
 
 # The names of the Metrics used, to label dataFrame
 #lsMetrics = ['Accuracy', 'Area Under Precision-Recall Curve',
@@ -124,7 +126,7 @@ def fCalculateMetric(iMetric, aPredicted):
 
 
 #First, we check if the file has already been saved
-if not os.path.isfile(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p'):
+if True:#not os.path.isfile(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p'):
     # Now, we loop through the Trial Directory and fill in results if they exist.
     # If the results do not exist, the performance metric is set to 0
     for iDLModel, sDLModel in enumerate(lsDLAlgorithms):
@@ -146,11 +148,14 @@ if not os.path.isfile(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearni
                         print('model ' + sDLModel + ' ' + str(iTrial) + ' failed - ' + sMetric + ' NOT determined')
 
     # Save the summary file
-    pickle.dump(dPerformanceByDLAlg, open(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p', 'wb'))
+    #pickle.dump(dPerformanceByDLAlg, open(os.path.join(sDeepLearningLocation, 'Results',
+    # 'DeepLearningResults')+'.p', 'wb'))
 
 # If the summary file already exists, load it
 elif os.path.isfile(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p'):
-    dPerformanceByDLAlg = pickle.load(open(os.path.join(sDeepLearningLocation, 'Results', 'DeepLearningResults')+'.p', 'rb'))
+    pass
+    #dPerformanceByDLAlg = pickle.load(open(os.path.join(sDeepLearningLocation, 'Results',
+# 'DeepLearningResults')+'.p', 'rb'))
 
 
 

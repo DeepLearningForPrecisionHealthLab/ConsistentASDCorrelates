@@ -45,5 +45,12 @@ __pycache__/
 /Parallelization/TimeseriesFilenames/
 /TrainTestDataWithConfounds.p
 /model.png
+/Parallelization/ABIDETest/
+/Parallelization/ABIDETest_v2/
+/Parallelization/ABIDE_Atlases/
+/Parallelization/DataAugmentation/
+/Parallelization/PostErrorAnalysisIniFiles/
+/Parallelization/TBI_test/
+
 
 

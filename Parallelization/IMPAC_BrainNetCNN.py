@@ -305,6 +305,8 @@ def fRunBrainNetCNNOnInput(sInputName, iModelNum, aXTrain, aXTest,
                     iTries=iTries+1
                     if iTries>10:
                         bFlag=False
+                except:
+                    print "Model "+sIni+" failed"
 
             aPredicted = BrainNetCNNModel.predict(aXTest)
 
@@ -378,9 +380,4 @@ if '__main__' == __name__:
                     fRunBrainNetCNNOnInput(sInputName, iModel, dXTrain['connectivity'][sAtlas],
                                            dXTest['connectivity'][sAtlas],
                                            aYTrain, aYTest, sSubInputName=sAtlas)
-
-
-
-
-
 

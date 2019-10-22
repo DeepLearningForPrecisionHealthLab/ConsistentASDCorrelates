@@ -4,9 +4,9 @@
 #SBATCH --partition=GPUp100
 #SBATCH --nodes=1
 #SBATCH --ntasks=2
-#SBATCH --time=6-02:10:00
+#SBATCH --time=15-02:10:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
-#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_Dense_MultiConn.txt"
+#SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_Dense_PostErrorAnalysis.txt"
 
 now=$(date +"%m-%d-%Y,%H:%M:%S")
 echo "Job start: $now"
@@ -16,7 +16,7 @@ module load parallel
 # SRUN arguments
 CORES_PER_TASK=56
 
-INPUTS_COMMAND="ls -v ./IniFiles/D*"
+INPUTS_COMMAND="ls -v ./PostErrorAnalysisIniFiles/D*"
 
 TASK_SCRIPT='python script_wrapper_dense.py'
 

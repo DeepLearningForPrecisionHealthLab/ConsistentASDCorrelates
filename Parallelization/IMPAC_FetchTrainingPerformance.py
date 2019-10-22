@@ -9,7 +9,7 @@ import pickle
 import pandas as pd
 import keras
 
-sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/AllAtlases'
+sDataPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/ISBIRerun'
 
 lsIndex = list(np.zeros(50))
 

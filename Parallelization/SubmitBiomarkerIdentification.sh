@@ -1,10 +1,10 @@
 #!/bin/bash
 
-#SBATCH --job-name=BiomarkerID
-#SBATCH --partition=GPUp100
+#SBATCH --job-name=BiomarkerID_8x
+#SBATCH --partition=256GBv1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --time=8-00:00:00
+#SBATCH --time=16-00:00:00
 #SBATCH --workdir="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization"
 #SBATCH --output="/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Logs/log_%j_Biomarker_Identification.txt"
 
@@ -14,7 +14,7 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=112
+CORES_PER_TASK=56
 
 # Setup to run
 module load python/3.6.4-anaconda

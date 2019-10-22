@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#SBATCH --job-name=BrainNet_LSGC
-#SBATCH --partition=GPUp100
+#SBATCH --job-name=BrainNet_MultiConn
+#SBATCH --partition=GPUv100s
 #SBATCH --nodes=2
 #SBATCH --ntasks=4
 #SBATCH --time=20-00:00:00
@@ -14,7 +14,7 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=56
+CORES_PER_TASK=72
 
 INPUTS_COMMAND="ls -vr ./IniFiles/B* | shuf"
 

@@ -459,16 +459,16 @@ Mask_EPI=True
 ; MOTION CORRECTION OPTIONS
 ; True: Do resting-state preprocessing (motion correction)
 Motion_correction={bRestingState}
-; Pipeline for denoising. Valid options are 'HMP' 'AROMA' 'HMP-AROMA' 'AROMA-HMP' and 'all
-Denoising_pipeline= {strDenoisingPipeline}
-; True: resample images to AROMA template. Don't need if EPI template in preprocessing was resampled.
-Resample=False
-; Lower bound of frequency band filter
-Filter_lower=0.008
-; Upper bound of frequency band filter
-Filter_upper=0.08
 ; Method for ICA-AROMA. Valid options are aggr, nonaggr, and both
 AROMA_method=both
+; Maximum intensity value for MinMax normalization
+Norm_units=1000
+; Use first temporal derivative terms in nuissance regression
+Regressor_derivatives=True
+; Linearly detrend the nuissance regressors
+Regressor_detrend=True
+; Use squared terms in nuissance regression
+Regressor_squared=True
 
 ; TASK-BASED FMRI SPECIFIC OPTIONS
 ; True: Do task-based preprocessing (GLM analysis)
@@ -488,46 +488,15 @@ Concatenate_runs=False
 Remove_invalid_contrasts=True
 
 ; RESTING-STATE FMRI SPECIFIC OPTIONS
-; True: Run singe-subject ICA using GIFT toolbox
-Gift_ica={bGiftIca}
-; Number of dimensions for final ICA using GIFT toolbox
-ICA_dims={nIcaDims}
-
-; Contrasts for task-based fMRI first-level GLM analysis. Leave commented out if not running fMRI subpipeline.
-; For each task to process, create a section called [SPMContrasts-<task name>]. <task name> should match the name
-; used in the functional image filenames. Within this section, specify each contrast vector in the format:
-; descriptive_contrast_vector_name=regressor1,<coefficient for regressor1>, regressor2, <coefficient for regressor2>, ...
-;[SPMContrasts-flanker]
-;contrast_congruent_correct=congruent_correct,1
-;contrast_incongruent_correct=incongruent_correct,1
-;contrast_incongruent_vs_congruent_correct=incongruent_correct,1,congruent_correct,-1
-
-[CONN]
-; CONN FMRI SPECIFIC OPTIONS
-; True: Do CONN functional connectivity processing
-Do_processing={bCONN}
-; Run CONN on fMRI images with this task name, default 'rest'
-Task_name=rest
-; Run CONN on preprocessed fMRI image described with this name.
-; 'motion' will run on all motion denoised images while 'preproc' will only run on preprocessed image
-Input_image={strConnInput}
-; True: Run denoising steps in CONN
-Do_denoising={bConnDenoising}
-; Parcellations to use. List the parcellation name, then the path to the .nii file
+Resting_state={bRestingState}
+; comma-separated list of tasks to process
+Resting_task_names=rest
+; Parcellations to use. List the parcellation name, then the path to the .nii file, then the path to a text file
+; with ROI names
 Parcellations={sConnAtlases}
-; Number of initial frames to remove from the scan to allow for the signal to stabilize
-Remove_initial_frames=0
-; 0 for no detrending, 1 for linear detrending, 2 for quadratic detrending, 3 for cubic detrending. Default 1
-Detrending=1
-; 0 for no temporal despiking, 1 for despiking before regression, 2 for despiking after regression. Default 1
-Despiking=1
-; Low,high bandpass filter cutoffs in Hz
-Filter=0.008,0.09
-; 1 for regression then bandpass filtering, 2 for simulataneous regression and bandpass filtering. Default 1
-Filter_order=1
-; Connectivity measure to use. 1 for bivariate correlation, 2 for semipartial correlation, 3 for bivariate
-; regression, 4 for multivariate regression. Default 1
-Connectivity=1
+Do_ica=True
+; Number of ICA components
+Ica_dims=20
 
 ; Diffusion image pre-processing options
 [dMRI]

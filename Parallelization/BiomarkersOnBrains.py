@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 import pickle as pkl
 import math
+import re
 import matplotlib.pyplot as plt
 from nilearn import plotting
 from nilearn import datasets
@@ -35,7 +36,13 @@ def fPlotROIs(sAtlas):
     # plot the ROIs of the BASC atlas
     plotting.plot_roi(sAtlas, cmap=plotting.cm.bwr)
 
-def fSelectROIs(pdImportances, flThreshold):
+def fSelectROIs(pdImportances, flThreshold, iTop):
+    """
+    Select all features above a threshold, if threshold is 0, select only the top 6
+    :param pdImportances:
+    :param flThreshold:
+    :return:
+    """
     #Select out ROI features
     pdROIImportances=pdImportances.drop((x for x in pdImportances.index if not x.__contains__('ROI')), axis=0)
     pdROIImportances=pdROIImportances.sort_values(['Importance'], ascending=False)
@@ -44,12 +51,23 @@ def fSelectROIs(pdImportances, flThreshold):
     iLen=int((-1+(1+8*len(pdROIImportances.index))**(1/2))/2)
     aConnections=np.zeros((iLen, iLen))
 
-    # loop through importances and fill in matrix where importance > a threshold
-    for iRow in range(iLen):
-        for iCol in range(iLen):
-            if iRow<=iCol:
-                if pdROIImportances.loc[f'ROI{iRow+1:03}-ROI{iCol+1:03}'].values[0]>=flThreshold:
-                    aConnections[iRow, iCol]=pdROIImportances.loc[f'ROI{iRow+1:03}-ROI{iCol+1:03}'].values[0]
+    if flThreshold==0:
+        # if threshold is 0, select only the top iTop
+        pdROIImportances=pdROIImportances.head(iTop)
+
+        # loop through importances and fill in matrix where importance > a threshold
+        for sIndex in pdROIImportances.index:
+            lsROIs=re.findall('\d+', sIndex)
+            iRow=int(int(lsROIs[0])-1)
+            iCol=int(int(lsROIs[1])-1)
+            aConnections[iRow, iCol]=pdROIImportances.loc[sIndex].values[0]
+    else:
+        for iRow in range(iLen):
+            for iCol in range(iLen):
+                if iRow<=iCol:
+                    if f'ROI{iRow+1:03}-ROI{iCol+1:03}' in pdROIImportances.index:
+                        if pdROIImportances.loc[f'ROI{iRow+1:03}-ROI{iCol+1:03}'].values[0]>=flThreshold:
+                            aConnections[iRow, iCol]=pdROIImportances.loc[f'ROI{iRow+1:03}-ROI{iCol+1:03}'].values[0]
 
     # Make the connections symmetric
     for iRow in range(iLen):
@@ -71,8 +89,8 @@ def fMatchCoordinates(aConnections, aCoordinates):
 def fPlotFinal(aConnections, lsNonzeroCoordinates, sSaveDir, iModel, iPermutations, flThresh):
     # Make the final plot
     cDisplay=plotting.plot_connectome(aConnections, lsNonzeroCoordinates,
-                                      edge_vmin=flThresh,
-                                      edge_vmax=int(math.ceil(np.amax(aConnections))),
+                                      edge_vmin=6,
+                                      edge_vmax=15,
                                       colorbar=True,
                                       edge_cmap="jet",
                                       alpha=0.5,
@@ -80,7 +98,9 @@ def fPlotFinal(aConnections, lsNonzeroCoordinates, sSaveDir, iModel, iPermutatio
 
     cInteractiveDisplay=plotting.view_connectome(aConnections, lsNonzeroCoordinates)
 
+    print(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.png'))
     cDisplay.savefig(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.png'))
+    plt.savefig(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.png'))
     cInteractiveDisplay.save_as_html(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.html'))
     plt.close()
     del(cDisplay)
@@ -95,7 +115,7 @@ def fFormatImportances(dImportances):
 
     return pdImportances
 
-def fBarPlotImportances(pdImportances, sDir, iPermutations):
+def fBarPlotImportances(pdImportances, sDir, iPermutations, iModel):
     pdImportances=pdImportances.sort_values(by=['Importance'], axis=0, ascending=False)
     fig, ax=plt.subplots()
     pdImportances.head(15).plot(kind='barh', ax=ax)
@@ -104,23 +124,26 @@ def fBarPlotImportances(pdImportances, sDir, iPermutations):
     plt.savefig(os.path.join(sDir, f'Model{iModel}Features{iPermutations}Permutations.png'))
     plt.close()
 
-def fProcessModel(iModel, sAtlas, iPermutations):
+def fProcessModel(iModel, sAtlas, iPermutations, sDir, flThresh, iTop):
     # Load importances
-    sDir = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/{iPermutations}Permutations'
     dImportances = pkl.load(open(os.path.join(sDir, f'Model{iModel}Importances.p'), 'rb'))
     pdImportances = fFormatImportances(dImportances)
-    fBarPlotImportances(pdImportances, sDir, iPermutations)
+    fBarPlotImportances(pdImportances, sDir, iPermutations, iModel)
 
     # make plots
-    aCoordinates = fFindCentroids(sAtlas=sAtlas)
-    lsNonzeroCoordinates=[]
-    flThresh=6
-    while (f'{lsNonzeroCoordinates}'==f'{[]}' or len(np.array(np.nonzero(aConnectionsNonzero)))==1):
-        aConnections = fSelectROIs(pdImportances=pdImportances, flThreshold=flThresh)
+    if not sAtlas=='anat':
+        aCoordinates = fFindCentroids(sAtlas=sAtlas)
+        lsNonzeroCoordinates=[]
+        aConnectionsNonzero=[0]
+        aConnections = fSelectROIs(pdImportances=pdImportances, flThreshold=flThresh, iTop=iTop)
         lsNonzeroCoordinates, aConnectionsNonzero = fMatchCoordinates(aConnections, aCoordinates)
-        flThresh=flThresh-1
+        # while (len(np.array(np.nonzero(aConnectionsNonzero))[0])<iTop*2):
+        #     aConnections = fSelectROIs(pdImportances=pdImportances, flThreshold=flThresh, iTop=iTop)
+        #     lsNonzeroCoordinates, aConnectionsNonzero = fMatchCoordinates(aConnections, aCoordinates)
+        #     flThresh=flThresh-1
 
-    fPlotFinal(aConnectionsNonzero, lsNonzeroCoordinates, sDir, iModel, 5, flThresh+1)
+
+        fPlotFinal(aConnectionsNonzero, lsNonzeroCoordinates, sDir, iModel, iPermutations, flThresh+1)
 
 if __name__=='__main__':
     # Fetch the atlas that will be used in this case
@@ -128,16 +151,30 @@ if __name__=='__main__':
 
     # Set atlases per model
     dModelAtlases={
-        1:'scale122',
-        2:'scale197',
-        3:'scale122',
-        4:'scale122',
-        5:'scale122'
+        #1:'scale064',
+        #2:'scale122',
+        3:'scale197',
+        # 4:'scale064',
+        # 5:'scale122'#,
+        # 6:'scale197',
+        # 7:'scale064',
+        # 8:'scale122',
+        # 9:'scale197',
+        # 10:'scale064',
+        # 11:'scale122',
+        # 12:'scale197',
+        # 13:'anat',
+        # 14:'anat'
     }
 
     for iModel, sAtlasKey in dModelAtlases.items():
         # set atlas
-        sAtlas = dBASC[sAtlasKey]
+        if not sAtlasKey=='anat':
+            sAtlas = dBASC[sAtlasKey]
+        else:
+            sAtlas='anat'
 
         # Process the model and make the glass brain
-        fProcessModel(iModel, sAtlas, 5)
+        iPermutations=1
+        sDir = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/AtlasResolutionComparison{iPermutations}Permutations'
+        fProcessModel(iModel, sAtlas, iPermutations, sDir=sDir, flThresh=6, iTop=26)

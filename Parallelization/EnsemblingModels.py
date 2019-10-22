@@ -32,6 +32,7 @@ import time
 import multiprocessing
 
 from sklearn import linear_model
+from sklearn.model_selection import KFold
 from joblib import Parallel, delayed
 from sklearn.model_selection import RandomizedSearchCV
 from sklearn.svm import SVC
@@ -467,6 +468,75 @@ def _fConfirmShape(aArray):
 
     return aArray
 
+def _fRetreiveClassifier(sType):
+    # generate the classifier and the distribution of parameters to search over
+    if sType=='Lasso Logistic Regression':
+        cClassifier = linear_model.LogisticRegression(penalty='l1')
+        dParamDistributions = {
+            'C': 1000 * (10 ** np.random.uniform(-5, 1, 100)),
+            'max_iter': np.random.uniform(1000, 100000, 100),
+        }
+    elif sType=='Ridge Logistic Regression':
+        cClassifier = linear_model.LogisticRegression(penalty='l2')
+        dParamDistributions = {
+            'C': 1000 * (10 ** np.random.uniform(-5, 1, 100)),
+            'max_iter': np.random.uniform(1000, 100000, 100),
+        }
+    elif sType=='Linear SVM':
+        cClassifier = SVC(probability=True)
+        dParamDistributions = {
+            'C': 10 ** np.random.uniform(-4, 4, 100),
+            'max_iter': np.random.uniform(10000, 100000, 100)
+        }
+    elif sType=='Gaussian SVM':
+        cClassifier = SVC(probability=True)
+        dParamDistributions = {
+            'C': 10 ** np.random.uniform(-4, 4, 100),
+            'gamma': 10 ** np.random.uniform(-2, 2, 100),
+            'max_iter': np.random.uniform(10000, 100000, 100)
+        }
+    elif sType=='Random Forest':
+        cClassifier = RandomForestClassifier()
+        dParamDistributions = {
+            'n_estimators': np.round(5 * 10 ** np.random.uniform(1, 3, 100)).astype(int),
+            'max_leaf_nodes': np.random.randint(5, 50, 100)
+        }
+    elif sType=='Extremely Random Trees':
+        cClassifier = ExtraTreesClassifier()
+        dParamDistributions = {
+            'n_estimators': np.round(5 * 10 ** np.random.uniform(1, 3, 100)).astype(int),
+            'max_leaf_nodes': np.random.randint(5, 50, 100),
+        }
+    # if not one of the above types, throw an error
+    else:
+        raise NotImplementedError(f'Only Logistic Regression (ridge and lasso),'
+                                  f'SVM (linear and gaussain kernel), Random Forest,'
+                                  f' and extremely random trees are implemented,'
+                                  f' Model type {sType} has not yet '
+                                  f'been implemented')
+
+    # return model and model params to search over
+    return cClassifier, dParamDistributions
+
+def fRandSearch(sType, aXTrain, aYTrain):
+    # Retrieve the classifier
+    cClassifier, dParamDistributions = _fRetreiveClassifier(sType)
+
+    # Run a random search
+    cRandSearch = RandomizedSearchCV(
+        cClassifier,
+        dParamDistributions,
+        cv=10,
+        n_iter=50,
+        n_jobs=1,
+        verbose=2,
+        scoring='roc_auc'
+    )
+
+    # Fit the model
+    cRandSearch.fit(aXTrain, aYTrain)
+    return cRandSearch
+
 def fMakePredictions(dModels, dXData):
     """
     Predicts the probability of a given class given a dictionary of data
@@ -490,9 +560,15 @@ def fMakePredictions(dModels, dXData):
             # If it is an sklearn model, use the predict_proba method
             if hasattr(dModels[sKey], 'predict_proba'):
                 aProb=dModels[sKey].predict_proba(dXData[sKey])[:,0]
+                # softmax the linear regression models
+                if sKey.__contains__('LinRidge') or sKey.__contains__('LinLasso'):
+                    aProb=np.exp(aProb)/sum(np.exp(aProb))
             # If it is a keras model, or doesn't have a predict_proba method, use the predict method
             elif hasattr(dModels[sKey], 'predict'):
                 aProb=dModels[sKey].predict(dXData[sKey])
+                # softmax the linear regression models
+                if sKey.__contains__('LinRidge') or sKey.__contains__('LinLasso'):
+                    aProb=np.exp(aProb)/sum(np.exp(aProb))
             # If it has no prediction methods, throw an error
             else:
                 raise AttributeError(f'Model:{sKey} has no prediction method')
@@ -502,7 +578,8 @@ def fMakePredictions(dModels, dXData):
 
     return dProbs
 
-def fReducedEnsemble(lsModels, dPredictions, aYTrain):
+def fReducedEnsemble(lsModels, dPredictions, aYTrain, dTestPredictions=None, aYTest=None, bRandSearch=False,
+                     iCrossVal=4):
     """
     Produces predictions for a reduced set of ensembled models without any random searching
     :param lsModels: list of which models to ensemble [3 only]
@@ -512,27 +589,91 @@ def fReducedEnsemble(lsModels, dPredictions, aYTrain):
     """
     # select subset of predictions to ensemble
     aPredictions=np.concatenate([value for key, value in dPredictions.items() if key in lsModels], 1)
+    if dTestPredictions is not None:
+        aTestPredictions = np.concatenate([value for key, value in dTestPredictions.items() if key in lsModels], 1)
 
     # Do ensembling
-    aSoftVote=np.mean(aPredictions, axis=1)
-    aHardVote=np.max(aPredictions, axis=1)
-    aLinRidgeStack=linear_model.LogisticRegression().fit(aPredictions, aYTrain).predict_proba(aPredictions)[:,0]
-    aSVMStack=SVC(probability=True).fit(aPredictions, aYTrain).predict_proba(aPredictions)[:,0]
+    if (dTestPredictions is None) and (aYTest is None):
+        #Start values at one
+        flSoftScore = 0
+        flHardScore = 0
+        flLinRidgeScore = 0
+        flSVMScore = 0
 
-    # Calculate score
-    flSoftScore=sk.metrics.roc_auc_score(aYTrain, aSoftVote)
-    flHardScore=sk.metrics.roc_auc_score(aYTrain, aHardVote)
-    flLinRidgeScore=sk.metrics.roc_auc_score(aYTrain, aLinRidgeStack)
-    flSVMScore=sk.metrics.roc_auc_score(aYTrain, aSVMStack)
+        # Set up cross validation
+        cSplitter=KFold(n_splits=iCrossVal)
+
+        for aTrainIndex, aValidationIndex in cSplitter.split(aPredictions):
+            # do ensembling
+            aSoftVote=np.mean(aPredictions[aValidationIndex], axis=1)
+            aHardVote=fHardVote(aPredictions[aValidationIndex])
+            aLinRidgeStack=linear_model.LogisticRegression().fit(aPredictions[aTrainIndex], aYTrain[aTrainIndex]).predict_proba(
+                aPredictions[aValidationIndex])[:,1]
+            aSVMStack=SVC(probability=True).fit(aPredictions[aTrainIndex], aYTrain[aTrainIndex]).predict_proba(
+                aPredictions[aValidationIndex])[:,1]
+
+            # Calculate score
+            flSoftScore = flSoftScore + sk.metrics.roc_auc_score(aYTrain[aValidationIndex], aSoftVote)
+            flHardScore = flHardScore + sk.metrics.roc_auc_score(aYTrain[aValidationIndex], aHardVote)
+            flLinRidgeScore = flLinRidgeScore + sk.metrics.roc_auc_score(aYTrain[aValidationIndex], aLinRidgeStack)
+            flSVMScore = flSVMScore + sk.metrics.roc_auc_score(aYTrain[aValidationIndex], aSVMStack)
+
+        # Find Average
+        flSoftScore = float(flSoftScore/iCrossVal)
+        flHardScore = float(flHardScore/iCrossVal)
+        flLinRidgeScore = float(flLinRidgeScore/iCrossVal)
+        flSVMScore = float(flSVMScore/iCrossVal)
+
+    elif bRandSearch==False:
+        aSoftVote=np.mean(aTestPredictions, axis=1)
+        aHardVote=fHardVote(aTestPredictions)
+        aLinRidgeStack=linear_model.LogisticRegression().fit(aPredictions, aYTrain).predict_proba(aTestPredictions)[:,1]
+        aSVMStack=SVC(probability=True).fit(aPredictions, aYTrain).predict_proba(aTestPredictions)[:,1]
+
+        # Calculate score
+        flSoftScore=sk.metrics.roc_auc_score(aYTest, aSoftVote)
+        flHardScore=sk.metrics.roc_auc_score(aYTest, aHardVote)
+        flLinRidgeScore=sk.metrics.roc_auc_score(aYTest, aLinRidgeStack)
+        flSVMScore=sk.metrics.roc_auc_score(aYTest, aSVMStack)
+    else:
+        aSoftVote=np.mean(aTestPredictions, axis=1)
+        aHardVote=fHardVote(aTestPredictions)
+        cLinRidgeStack=fRandSearch('Ridge Logistic Regression', aPredictions, aYTrain)
+        aLinRidgeStack=cLinRidgeStack.best_estimator_.predict_proba(aTestPredictions)[:,1]
+        cSVMStack=fRandSearch('Gaussian SVM', aPredictions, aYTrain)
+        aSVMStack=cSVMStack.best_estimator_.predict_proba(aTestPredictions)[:,1]
+
+        # Calculate score
+        flSoftScore=sk.metrics.roc_auc_score(aYTest, aSoftVote)
+        flHardScore=sk.metrics.roc_auc_score(aYTest, aHardVote)
+        flLinRidgeScore=sk.metrics.roc_auc_score(aYTest, aLinRidgeStack)
+        flSVMScore=sk.metrics.roc_auc_score(aYTest, aSVMStack)
 
     # save score
     sTag=f'{lsModels}'.replace('"','').replace("'","").replace(',','').replace('[','').replace(']','').replace(' ', '_')
-    #sModel=f'{sTag}_Scores.p'
-    #pkl.dump((flSoftScore, flHardScore, flLinRidgeScore, flSVMScore),
-             #open(os.path.join(f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/Ensembles'
-                              # f'/IterativeSearch{len(lsModels)}', sModel), 'wb'))
-							  
-	return {f'{sTag}_Scores', [flSoftScore, flHardScore, flLinRidgeScore, flSVMScore]}
+
+    return {f'{sTag}_Scores': [flSoftScore, flHardScore, flLinRidgeScore, flSVMScore]}
+
+def fHardVote(aData):
+    """
+    Does hard voting on prediction vector while varying the threshold
+    :param aData: array of data
+    :return: array of predictions with the threshold varied
+    """
+    aThresholds = np.zeros(aData.shape[0:1])
+
+    for flThreshold in np.linspace(0,1,1000):
+        # Perform hard votes for final probabilities, varying the threshold for voting
+        aVotes = (aData > flThreshold).astype('int')
+
+        aPredictions = ((np.sum(aVotes, axis=1) / (aVotes.shape[1])) >= 0.5).astype('int')
+
+        # Fill the final prediction vector
+        for iRow in range(aThresholds.shape[0]):
+            if aPredictions[iRow] == 0:
+                if aThresholds[iRow] == 0:
+                    aThresholds[iRow] = flThreshold
+    return aThresholds
 
 def fFormatToDataFrame(sModelPerformanceDir):
     """
@@ -550,16 +691,27 @@ def fFormatToDataFrame(sModelPerformanceDir):
 
     return pdPerformance.astype('float')
 
+def fFormatListOfDicts(lsd):
+    """
+    Formats the list of dicts returned by the parallel processing
+    :param lsd: list of dicts
+    :return: dataframe of data, in form:
+           | Soft Vote |  Hard Vote  | Logistic Ridge  |  SVM   |
+    Model1 |    ...    |     .....   |    ......       |  ...   |
+    Model2 |    ...    |     .....   |    ......       |  ...   |
+    """
+    dReformatted = dict((key, d[key]) for d in lsd for key in d)
+    dfFinal=pd.DataFrame.from_dict(dReformatted).T
+    dfFinal.columns=['Soft Vote', 'Hard Vote', 'Logistic Ridge', 'SVM']
+
+    return dfFinal
 
 if '__main__'==__name__:
     # Load the data that will be used
     dXData, aYData = fLoadPDData()
     del(dXData)
 
-    dTopSet={}
-
-    # NOTE, this uses the full model, not the output predictions
-    sModelPath='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/Ensembles/EnsembleModelSet.p'
+    # NOTE, the predictions alone are preferentially used over the entire model
     sDataPath='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/Ensembles/EnsembleDataSet.p'
 
     # load indices of train/test
@@ -571,125 +723,119 @@ if '__main__'==__name__:
     aYTest=aYData[aTestLoc.astype('int'),:]
     del(aYData)
 
-    # load models
-    dModels = pkl.load(open(sModelPath,'rb'))
+    # load data for models
     dXData = pkl.load(open(sDataPath, 'rb'))
 
-    # Get only training X data
+    # Get training and test X data
+    dXTrainData={}
+    dXTestData={}
     for sKey in dXData.keys():
         if 'Dense' in sKey:
-            dXData[sKey]=np.expand_dims(np.expand_dims(dXData[sKey].iloc[aTrainLoc].values, axis=1), axis=3)
+            dXTrainData[sKey]=np.expand_dims(np.expand_dims(dXData[sKey].iloc[aTrainLoc].values, axis=1), axis=3)
+            dXTestData[sKey]=np.expand_dims(np.expand_dims(dXData[sKey].iloc[aTestLoc].values, axis=1), axis=3)
         elif 'LSTM' in sKey:
-            dXData[sKey]=np.expand_dims(dXData[sKey].iloc[aTrainLoc].values, axis=1)
+            dXTrainData[sKey]=np.expand_dims(dXData[sKey].iloc[aTrainLoc].values, axis=1)
+            dXTestData[sKey]=np.expand_dims(dXData[sKey].iloc[aTestLoc].values, axis=1)
         else:
-            dXData[sKey]=dXData[sKey].iloc[aTrainLoc].values
-
+            dXTrainData[sKey]=dXData[sKey].iloc[aTrainLoc].values
+            dXTestData[sKey]=dXData[sKey].iloc[aTestLoc].values
 
     # make dictionary of predictions from models
     sPredictionPath='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/Ensembles' \
-                    '/EnsemblePredictionSet.p'
+                    '/EnsemblePredictionSetSoftmaxed.p'
 
+    # If the predictions exist, load them. Otherwise, make the predictions
     if not os.path.isfile(sPredictionPath):
-        dPredictions=fMakePredictions(dModels, dXData)
+        sModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/Ensembles/EnsembleModelSet.p'
+        dModels = pkl.load(open(sModelPath, 'rb'))
+        dPredictions=fMakePredictions(dModels, dXTrainData)
         pkl.dump(dPredictions, open(sPredictionPath, 'wb'))
     else:
         dPredictions=pkl.load(open(sPredictionPath,'rb'))
 
-    # set up all sets to loop through for 3 combinations in parallel
-    ls3Perms=list(itertools.combinations(dPredictions.keys(), 3))
-    random.shuffle(ls3Perms)
-	ls3Perms=ls3Perms[0:50]
+    #Repeat for test data
+    sTestPredictionPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/Ensembles' \
+                      '/EnsemblePredictionTestSetSoftmaxed.p'
+    if not os.path.isfile(sTestPredictionPath):
+        sModelPath = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/Ensembles' \
+                     '/EnsembleModelSet.p'
+        dModels = pkl.load(open(sModelPath, 'rb'))
+        dTestPredictions=fMakePredictions(dModels, dXTestData)
+        pkl.dump(dTestPredictions, open(sTestPredictionPath, 'wb'))
+    else:
+        dTestPredictions=pkl.load(open(sTestPredictionPath,'rb'))
+
+
+    # Set number of parallel jobs
     nParallel=int(multiprocessing.cpu_count()/4)
-    print(f'Running parallel ensemble jobs, nNodes={nParallel}')
 
-    # run the ensembling
-    lsDict3Perms=Parallel(n_jobs=nParallel)(delayed(fReducedEnsemble)
-                                   (lsModels, dPredictions, aYTrain) for lsModels in ls3Perms)
+    # if True, run ensembles of 3 models
+    b3Models=False
+    if b3Models:
+        # set up all sets to loop through for 3 combinations in parallel
+        lsTopThrees=list([x for x in dPredictions.keys() if not x.__contains__('SVM')])
+        ls3Perms=list(itertools.combinations(lsTopThrees, 3))
+        random.shuffle(ls3Perms)
+        print(f'Running parallel ensemble jobs, nNodes={nParallel}')
 
-    # Save
-    pkl.dump(lsDict3Perms, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
-                                     'AlternateMetrics/Ensembles/lsdIterativeSearchEnsembleOf3Results.p','wb'))
-	del(lsDict3Perms)
-	
-    # set up sets to loop through for 5 combinations in parallel
-    lsTopTwos=list([x in dPredictions.keys() if (x.__contains__('Rank0') or x.__contains__('Rank1'))])
-    ls5Perms=list(itertools.combinations(lsTopTwos,5))
-    random.shuffle(ls5Perms)
-	ls5Perms=ls5Perms[0:50]
-	
-	# Run the ensembling
-    lsDict5Perms=Parallel(n_jobs=nParallel)(delayed(fReducedEnsemble)
-                               (lsModels, dPredictions, aYTrain) for lsModels in ls3Perms)
+        # run the ensembling
+        lsDict3Perms=Parallel(n_jobs=nParallel)(delayed(fReducedEnsemble)(lsModels, dPredictions, aYTrain) for lsModels in ls3Perms)
 
-	# Save
-    pkl.dump(lsDict5Perms, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
-                                     'AlternateMetrics/Ensembles/lsdIterativeSearchEnsembleOf5Results.p','wb'))
-									 
-									 
-									 
-									 
-									 
-									 
-									 
-									 
-									 
-									 
-									 
-									 
-	###########################################################################################################
-    # # For every possible combination of 3 permutaions of model (order doesn't matter)
-    # for tuModels in ls3Perms:
-    #
-    #     # initialize reduced set
-    #     dXTrainDataReduced={}
-    #     dXTestDataReduced={}
-    #     dModelsReduced={}
-    #
-    #     # Construct the reduced set
-    #     for sModel in tuModels:
-    #         dXTrainDataReduced.update({sModel: dXData[sModel].iloc[aTestLoc]})
-    #         dXTestDataReduced.update({sModel: dXData[sModel].iloc[aTestLoc]})
-    #         dModelsReduced.update({sModel: dModels[sModel]})
-    #
-    #     # # Initialize the ensemble model
-    #     cEnsemble=cEnsembleModel(dModelsReduced)
-    #
-    #     # Do soft and hard voting
-    #     cEnsemble.fSoftVoter(dXTrainDataReduced, dXTestDataReduced)
-    #     cEnsemble.fHardVoter(dXTrainDataReduced, dXTestDataReduced)
-    #
-    #     # set model types for blending and stacking
-    #     lsTypes=[
-    #         'Fixed Linear SVM',
-    #         'Fixed Ridge Logistic Regression'
-    #         # 'Lasso Logistic Regression',
-    #         # 'Ridge Logistic Regression',
-    #         # 'Linear SVM',
-    #         # 'Gaussian SVM',
-    #         # 'Random Forest',
-    #         # 'Extremely Random Trees'
-    #     ]
-    #
-    #
-    #     # Train stacking models
-    #     sFile = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/' \
-    #         f'Ensembles/IterativeSearch/cEnsemble{tuModels[0]}_{tuModels[1]}_{tuModels[2]}TrainScore.p'
-    #     if not os.path.isfile(sFile):
-    #         for sType in lsTypes:
-    #             cEnsemble.fTrainStackingModel(dXTrainDataReduced, dXTestDataReduced, aYTrain, sType=sType)
-    #         pkl.dump(cEnsemble, open(sFile,'wb'))
-    #     else:
-    #         cEnsemble=pkl.load(open(sFile, 'rb'))
-    #
-    #     # ROC AUC scores:
-    #     dScores = cEnsemble.fPlotROCAUC(aYTest,
-    #                           f'ROC curve, Ensemble of Top {iTop} Models',
-    #                           f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/Images'
-    #                           f'/ROCCurveTop{iTop}ModelsEnsembled.png')
-    #     # Clear up variables
-    #     del(dScores)
-    #     del(cEnsemble)
-    #     del(dModelsReduced)
-    #     del(dXTrainDataReduced)
-    #     del(dXTestDataReduced)
+        # Convert to the right form
+        pd3Perms = fFormatListOfDicts(lsDict3Perms)
+
+        # Save
+        pkl.dump(pd3Perms, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
+                                         'AlternateMetrics/Ensembles/pdIterativeSearchEnsembleOf3NoSVM.p',
+                                'wb'))
+
+    # if True, run ensembles of 5 models
+    b5Models=True
+    if b5Models:
+        # set up sets to loop through for 5 combinations in parallel
+        # only uses top two models per category rather than the top 10 per category
+        lsTopTwos=list([x for x in dPredictions.keys() if ((x.__contains__('Rank0') or x.__contains__('Rank1')) and
+                                                           not x.__contains__('SVM'))])
+        ls5Perms=list(itertools.combinations(lsTopTwos,5))
+        random.shuffle(ls5Perms)
+
+        # Run the ensembling
+        lsDict5Perms=Parallel(n_jobs=nParallel)(delayed(fReducedEnsemble)
+                                   (lsModels, dPredictions, aYTrain) for lsModels in ls5Perms)
+
+        # Convert to the right form
+        pd5Perms = fFormatListOfDicts(lsDict5Perms)
+
+        # Save
+        pkl.dump(pd5Perms, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
+                                         'AlternateMetrics/Ensembles/pdIterativeSearchEnsembleOf5NoSVM.p',
+                                'wb'))
+
+    # if bTest, load the top results and train the top results in a dictionary
+    bTest=False
+    bRandSearch=False
+    if bTest:
+        # set up sets to loop through top models
+        dTop5s=pkl.load(open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
+                              'AlternateMetrics/Ensembles/dIterativeSearchEnsembleOf5SoftmaxLinResults.p', 'rb'))
+        dTop3s=pkl.load(open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
+                              'AlternateMetrics/Ensembles/dIterativeSearchEnsembleOf3SoftmaxLinResults.p', 'rb'))
+        # Run the ensembling
+        lsDict5PermsTop=Parallel(n_jobs=nParallel)(delayed(fReducedEnsemble)
+                                   (lsModels, dPredictions, aYTrain, dTestPredictions, aYTest, bRandSearch) for
+                                                   lsModels in list(dTop5s.values()))
+        lsDict3PermsTop=Parallel(n_jobs=nParallel)(delayed(fReducedEnsemble)
+                                   (lsModels, dPredictions, aYTrain, dTestPredictions, aYTest, bRandSearch) for
+                                                   lsModels in list(dTop3s.values()))
+
+        pd5PermsTop=fFormatListOfDicts(lsDict5PermsTop)
+        pd3PermsTop=fFormatListOfDicts(lsDict3PermsTop)
+
+        # Save
+        # pkl.dump(pd5PermsTop, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
+        #                                  'AlternateMetrics/Ensembles/pdIterativeSearchEnsembleOf5TopResults.p','wb'))
+        # # Save
+        # pkl.dump(pd3PermsTop, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/'
+        #                                  'AlternateMetrics/Ensembles/pdIterativeSearchEnsembleOf3TopResults.p','wb'))
+
 

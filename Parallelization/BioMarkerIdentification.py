@@ -79,7 +79,7 @@ def fPerformTest(iPermutationNum, sFeature, pdData, sModelType, cModel, aActual,
         aPredicted = cModel.predict(aXPrimeData)
     return skm.roc_auc_score(aActual, aPredicted)
 
-def fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData, nParallel=1, cOutputter=None):
+def fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData, nParallel=8, cOutputter=None):
     """
     tests a feature in a model for nPermutations permutations
     :param nPermutaions: the number of Permutations to run
@@ -425,7 +425,7 @@ if '__main__'==__name__:
     }
 
     # Permute the models
-    nPermutations = 1
+    nPermutations = 4
     dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData, dFormattedXData, dModels)
 
     # Save it

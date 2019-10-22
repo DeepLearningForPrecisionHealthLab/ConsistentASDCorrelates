@@ -71,7 +71,7 @@ def plt2DKDEs(dfModelMetrics, lComparison, flPercent):
     kdes = [KernelDensity(kernel='gaussian', bandwidth=1).fit(Zi) for Zi in Zdata]
     Z = [np.exp(kde.score_samples(np.dstack([X.flatten(), Y.flatten()])[0]).reshape(*X.shape)) for kde in kdes]
 
-    fPlot2DDist(X, Y, Z, ['Orange', 'Blue'], ['Oranges', 'Blues'], ' vs '.join(lComparison), lComparison[0],
+    fPlot2DDist(X, Y, Z, ['Blue', 'Orange'], ['Blues', 'Oranges'], ' vs '.join(lComparison), lComparison[0],
                 lComparison[1])
 
 def fPlot2DDist(X, Y, Zs, colors, cmaps, title, xlabel, ylabel):
@@ -94,7 +94,7 @@ def fPlot2DDist(X, Y, Zs, colors, cmaps, title, xlabel, ylabel):
     flMax = np.amax(Zs)
     flMid = (flMin + flMax) / 2
     ax.set_zticks([flMin, flMid, flMax])#, ['Low', 'Med', 'High'])
-    ax.set_zticklabels(['Low', 'Med', 'High'])
+    # ax.set_zticklabels(['Low', 'Med', 'High'])
 
     fig.tight_layout()
 
@@ -103,10 +103,10 @@ def fPlot2DDist(X, Y, Zs, colors, cmaps, title, xlabel, ylabel):
         cset = ax.contour(X, Y, Zi, zdir='x', offset=X.min(), cmap=CMi)
         cset = ax.contour(X, Y, Zi, zdir='y', offset=Y.min(), cmap=CMi)
         ax.set_zticks([flMin, flMid, flMax])#, ['Low', 'Med', 'High'])
-        ax.set_zticklabels(['Low', 'Med', 'High'])
+        #ax.set_zticklabels(['Low', 'Med', 'High'])
 
     ax.set_zticks([flMin, flMid, flMax])#, ['Low', 'Med', 'High'])
-    ax.set_zticklabels(['Low', 'Med', 'High'])
+    #ax.set_zticklabels(['Low', 'Med', 'High'])
     ax.set_zlabel('Density')
     ax.view_init(elev=30, azim=30)
     plt.show()
@@ -114,8 +114,9 @@ def fPlot2DDist(X, Y, Zs, colors, cmaps, title, xlabel, ylabel):
 def fFetchList(sType, sModality='combined', sAtlas='basc122'):
     if sType=='LSTM' or sType=='Dense':
         # initialize dataframe
-        pdPerformance=pd.DataFrame(index=range(50), columns=['Performance','hidden_layers','log_2_bottom_layer_width',
-                                                             'Dropout','regularization'])
+        pdPerformance=pd.DataFrame(index=range(50), columns=['Performance','Hidden Layers',
+                                                             r'$log_{2}(First Layer Size)$',
+                                                             'Dropout Fraction','Regularization'])
         # load results and parameters for each model
         for i in range(50):
             sIniLoc='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/' \
@@ -134,32 +135,37 @@ def fFetchList(sType, sModality='combined', sAtlas='basc122'):
             pdPerformance.loc[i, 'Performance']=flPerf
 
             config = read_config_file(sIniLoc)
-            pdPerformance.loc[i,'log_2_bottom_layer_width']=math.log(int(config['layer/input']['units']),2)
-            pdPerformance.loc[i,'hidden_layers']=len([x for x in config if x.__contains__(f'layer/{sType}')])
-            pdPerformance.loc[i,'Dropout']=float(config['layer/Dropout0']['rate'])
-            pdPerformance.loc[i,'regularization']=float(config['layer/input']['regularizer'])
+            pdPerformance.loc[i,r'$log_{2}$(First Layer Size)']=math.log(int(config['layer/input']['units']),2)
+            pdPerformance.loc[i,'Hidden Layers']=len([x for x in config if x.__contains__(f'layer/{sType}')])
+            pdPerformance.loc[i,'Dropout Fraction']=float(config['layer/Dropout0']['rate'])
+            pdPerformance.loc[i,'Regularization']=float(config['layer/input']['regularizer'])
             pdPerformance=pdPerformance.sort_values(by=['Performance'], ascending=False)
 
-        return pdPerformance, ['hidden_layers','log_2_bottom_layer_width',
-                                                             'Dropout','regularization']
+        return pdPerformance, ['Hidden Layers',r'$log_{2}$(First Layer Size)',
+                               'Dropout Fraction','Regularization']
 
     else:
-        cModel=fLoadModels('LinRidge', 'combined', 'basc122')[0]
-        pdPerformance=pd.DataFrame(index=range(50), columns=['Performance','max_iter_x_10000', 'alpha'])
+        cModel=fLoadModels(sType, sModality, sAtlas)[0]
+        # TODO only works for Logistic Regression for now
+        pdPerformance=pd.DataFrame(index=range(50), columns=['Performance','Maximum Iterations (x10,000)', r'$log_{10}(\alpha)$'])
         for i in range(50):
             pdPerformance.loc[i,'Performance']=cModel.grid_scores_[i].mean_validation_score
-            pdPerformance.loc[i,'max_iter_x_10000']=cModel.grid_scores_[i].parameters['max_iter']/10000
-            pdPerformance.loc[i,'log_10(alpha)']=math.log(cModel.grid_scores_[i].parameters['alpha'],10)
+            pdPerformance.loc[i,'Maximum Iterations (x10,000)']=cModel.grid_scores_[i].parameters['max_iter']/10000
+            pdPerformance.loc[i,r'$log_{10}(\alpha)$']=math.log(cModel.grid_scores_[i].parameters['alpha'],10)
         pdPerformance=pdPerformance.sort_values(by=['Performance'], ascending=False)
 
-        return pdPerformance, ['max_iter_x_10000', 'log_10(alpha)']
+        return pdPerformance, ['Maximum Iterations (x10,000)', r'$log_{10}(\alpha)$']
 
 
 if __name__=='__main__':
-    pdPerformance, lToTest = fFetchList('LinRidge', sModality='combined', sAtlas='basc122')
-    plt.style.use('seaborn')
-    for lComparison in itertools.combinations(lToTest, 2):
-        plt2DKDEs(pdPerformance, list(lComparison), 15)
-        plt.savefig(
-            '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/KDEs/{}vs{}.png'\
-            .format(lComparison[0].replace("\'", "").replace(" ",""), lComparison[1].replace("\'", "").replace(" ","")))
+    lsAtlases=['basc064', 'basc122', 'basc197']
+    for sAtlas in lsAtlases:
+        sModality='combined'
+        pdPerformance, lToTest = fFetchList('Dense', sModality='combined', sAtlas=sAtlas)
+        plt.style.use('seaborn')
+        for lComparison in itertools.combinations(lToTest, 2):
+            plt2DKDEs(pdPerformance, list(lComparison), 15)
+            plt.savefig(
+                '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/KDEs/{}{}{}vs{}.png'\
+                .format(sModality, sAtlas, lComparison[0].replace("\'", "").replace(" ",""), lComparison[1].replace(
+                    "\'", "").replace(" ","")))
