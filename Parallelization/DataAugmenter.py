@@ -59,9 +59,11 @@ class cDataAugmenter:
         # initialize decomposition method
         self.sDecomp = sDecomp
         if sDecomp == 'PCA':
-            cDimReducer = PCA()
+            # Keep nROI components
+            cDimReducer = PCA(n_components=self.dXData[list(self.dXData.keys())[0]].shape[1])
         elif sDecomp == 'ICA':
-            cDimReducer = FastICA()
+            # Keep nROI components
+            cDimReducer = FastICA(n_components=self.dXData[list(self.dXData.keys())[0]].shape[1])
         elif sDecomp == 'PLS-DA':
             cDimReducer = PLSRegression(n_components=2)#dXTimeseriesData[list(dXTimeseriesData.keys())[0]].shape[1])
 
@@ -80,7 +82,8 @@ class cDataAugmenter:
         """
         self.dXData = dXTimeseriesData
         if self.sDecomp=='PCA' or self.sDecomp=='ICA':
-            self.cSubspace = cDimReducer.fit(np.concatenate([dXTimeseriesData[sKey] for sKey in dXTimeseriesData.keys()]))
+            self.cSubspace = cDimReducer.fit(np.concatenate([self.fReshapeDataToWindowed(dXTimeseriesData[sKey]) for
+                                                             sKey in dXTimeseriesData.keys()], axis=0))
         elif self.sDecomp=='PLS-DA':
             aX = np.concatenate([dXTimeseriesData[sKey] for sKey in dXTimeseriesData.keys()])
             dY=od()
@@ -95,6 +98,85 @@ class cDataAugmenter:
             aY = np.concatenate([dY[sKey] for sKey in dY.keys()], axis=0)
             self.cSubspace = cDimReducer.fit(aX, aY)
             self.cSubspace.inverse_transform=self._fInverseTransform
+
+    def fReshapeDataToWindowed(self, aArray, iWindowShape=3):
+        """
+        Reshapes nTimepoints x nROI data to shape iWindowShape X (nROI X iWindowShape) data
+
+        For example,
+            ROI1    ROI2    ...
+        t1   1       1
+        t2   2       2
+        t3   3       1
+        t4   4       2
+        t5   5       1
+
+        becomes
+
+            ROI1    ROI2    ...            ROI1    ROI2    ...            ROI1    ROI2    ...
+        t1   1       1                 t2   2       2                 t3   3        1
+        t2   2       2                 t3   3       1                 t4   4        2
+        t3   3       1                 t4   4       2                 t5   5        1
+        ...
+        :param: iWindowShape (int) width of window
+        :param: aArray (array) original array
+        :return: aReshapedArray (array) reshaped as described above
+        """
+        # set up shape of new array
+        aReshapedArray=np.zeros((iWindowShape, aArray.shape[1], aArray.shape[0]-(iWindowShape-1)))
+
+        # fill new array
+        for i in range(aReshapedArray.shape[2]):
+            aReshapedArray[:,:,i]=aArray[i:i+iWindowShape, :]
+
+        # reshape into final shape required for PCA
+        aReshapedArray=[aReshapedArray[:,:,i].flatten() for i in range(aReshapedArray.shape[2])]
+
+        return np.array(aReshapedArray)
+
+    def fWindowedToTimeseries(self, aArray, iWindowShape=3):
+        """
+        Reshapes iWindowShape X (nROI X iWindowShape) data to nTimepoints x nROI
+
+        For example,
+            ROI1    ROI2    ...            ROI1    ROI2    ...            ROI1    ROI2    ...
+        t1   1       1                 t2   2       2                 t3   3        1
+        t2   2       2                 t3   3       1                 t4   4        2
+        t3   3       1                 t4   4       2                 t5   5        1
+        ...
+
+        becomes
+            ROI1    ROI2    ...
+        t1   1       1
+        t2   2       2
+        t3   3       1
+        t4   4       2
+        t5   5       1
+
+        :param: iWindowShape (int) width of window
+        :param: aArray (array) original array
+        :return: aReshapedArray (array) reshaped as described above
+        """
+        # set up shape of new arrays
+        # This one is time in 3rd axis, each timepoint in 1st axis
+        aReshapedArray = np.zeros((iWindowShape, int(aArray.shape[1]/iWindowShape), aArray.shape[0]))
+        aFinalReshapedArray = np.empty((aArray.shape[0]+(iWindowShape-1), int(aArray.shape[1]/iWindowShape),
+                                       aArray.shape[0]))*np.nan
+
+        # split into each window with time along 3rd axis
+        iROIs=int(aArray.shape[1]/iWindowShape)
+        for i in range(aReshapedArray.shape[2]):
+            for j in range(iWindowShape):
+                aReshapedArray[j,:,i]=aArray[i,iROIs*j:iROIs*(j+1)]
+
+        # fill new array by stacking previous arrays with each new one offest from old by one
+        for i in range(aFinalReshapedArray.shape[0]-(iWindowShape-1)):
+            aFinalReshapedArray[i:iWindowShape+i, :, i]=aReshapedArray[:,:,i]
+
+        # average windows
+        aFinalReshapedArray=np.nanmean(aFinalReshapedArray, axis=2)
+
+        return aFinalReshapedArray
 
     def _fInverseTransform(self, aReduced):
         aProjectedToRealSpace = np.dot(aReduced, self.cSubspace.components)
@@ -112,8 +194,8 @@ class cDataAugmenter:
         """
         # dXData in latent space
         self.dXData_LatentSpace = od()
-        self.dXData_LatentSpace.update({sKey: self.cSubspace.transform(dXTimeseriesData[sKey]) for sKey in dXTimeseriesData.keys()})
-
+        self.dXData_LatentSpace.update({sKey: self.cSubspace.transform(self.fReshapeDataToWindowed(
+                                                                        dXTimeseriesData[sKey])) for sKey in dXTimeseriesData.keys()})
         self.aXData = self.fMakeArrayFromDict(dXTimeseriesData)
         self.aXData_LatentSpace = self.fMakeArrayFromDict(self.dXData_LatentSpace)
 
@@ -125,13 +207,13 @@ class cDataAugmenter:
         """
         # make array to draw from, cropping all timeseries to shortest timeseries
         iMinTime = min([dXData[sKey].shape[0] for sKey in dXData.keys()])
-        iFeatures = self.dXData_LatentSpace[list(self.dXData_LatentSpace.keys())[0]].shape[1]
-        iSamples = len(self.dXData_LatentSpace.keys())
+        iFeatures = dXData[list(dXData.keys())[0]].shape[1]
+        iSamples = len(dXData.keys())
 
         # populate array from dict
         aXData = np.zeros((iMinTime, iFeatures, iSamples))
         for iSub, sKey in enumerate(dXData.keys()):
-            aXData[:, :, iSub] = self.dXData_LatentSpace[sKey][:iMinTime, :]
+            aXData[:, :, iSub] = dXData[sKey][:iMinTime, :]
 
         return aXData
 
@@ -198,8 +280,11 @@ class cDataAugmenter:
             aNew = np.concatenate([self.aXData_LatentSpace[:, :, aRand[iN]] for iN in range(iAvg)], axis=2)
             aNew = np.mean(aNew, axis=2)
 
-        # project to real space again
-        return self.cSubspace.inverse_transform(aNew)
+        # project to real space and reshape to correct shape
+        aNew = self.cSubspace.inverse_transform(aNew)
+        aNew = self.fWindowedToTimeseries(aNew)
+
+        return aNew
 
 def fTriVect(aDat):
     """"
@@ -276,7 +361,7 @@ if __name__ == '__main__':
     # Set parameters for augmentation
     lsSamples = [500, 1000, 5000, 10000, 25000, 50000]#[500, 1000, 5000, 10000, 25000, 50000]
     lsDecomp = ['PCA', 'ICA']#['PCA', 'ICA','PLS-DA']
-    lsNoiseTo = ['None', 'finaltimeseries','components','both']#['None', 'finaltimeseries','components','both']
+    lsNoiseTo = ['None', 'finaltimeseries','components', 'both']#['None', 'finaltimeseries','components','both']
     iSplits = 3
     lsCombos = list(itertools.product(*[lsSamples, lsDecomp, lsNoiseTo]))
     #lsCombos.insert(0, (0, 'None', 'None')) #(a control to insert)
@@ -303,7 +388,7 @@ if __name__ == '__main__':
     #######
     for iAugExperiment, (iSamples, sDecomp, sNoiseTo) in enumerate(lsCombos):
         sSavePath=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/Augmented/' \
-            f'{sDecomp}Decomposition_{sNoiseTo.title()}Noise_{iSamples}xAugmented'
+            f'{sDecomp}Decomposition_{sNoiseTo.title()}Noise_{iSamples}xAugmented_Windowed'
         pdAugmentationResults.loc[iAugExperiment]['Augmentation Method']= sDecomp
         pdAugmentationResults.loc[iAugExperiment]['Noise in timeseries'] = 1 if (sNoiseTo=='both' or
                                                                              sNoiseTo=='finaltimeseries') else 0
@@ -597,5 +682,4 @@ if __name__ == '__main__':
     #     pdAugmentationResults.loc[iAugExperiment]['Generalization Error'] = pdAugmentationResults.loc[iAugExperiment]['Train AUC ROC']-\
     #                                                                     pdAugmentationResults.loc[iAugExperiment]['Validation AUC ROC']
     #
-    pkl.dump(pdAugmentationResults, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
-                                            '/DataAugmentation/pdTestResults_Dense8_Test.p','wb'))
+    pkl.dump(pdAugmentationResults, open(os.path.join(sSavePath, 'pdTestResults_Dense8_Test.p','wb')))
