@@ -21,6 +21,7 @@ __email__ = "Cooper.Mellema@UTSouthwestern.edu"
 __status__ = "Prototype"
 
 import os
+import sys
 import itertools
 import copy
 import numpy as np
@@ -43,7 +44,7 @@ np.random.seed(42)
 
 
 class cDataAugmenter:
-    def __init__(self, dXTimeseriesData, sDecomp='PCA', dYData=None, dXAdditionalData=None):
+    def __init__(self, dXTimeseriesData, sDecomp='PCA', dYData=None, dXAdditionalData=None, iWindowShape=3):
         """
         :param dXTimeseriesData: (ordered dict) {Subject: np.array(nTimepoints x nROIs) or (1 x nConnMetric)}
         :param sDecomp: PCA, ICA, or PLS-DA
@@ -53,6 +54,7 @@ class cDataAugmenter:
         """
         # set data
         self.dXData = dXTimeseriesData
+        self.iWindow = iWindowShape
         if dXAdditionalData is not None:
             self.dXAdditionalData = dXAdditionalData
 
@@ -82,8 +84,8 @@ class cDataAugmenter:
         """
         self.dXData = dXTimeseriesData
         if self.sDecomp=='PCA' or self.sDecomp=='ICA':
-            self.cSubspace = cDimReducer.fit(np.concatenate([self.fReshapeDataToWindowed(dXTimeseriesData[sKey]) for
-                                                             sKey in dXTimeseriesData.keys()], axis=0))
+            self.cSubspace = cDimReducer.fit(np.concatenate([self.fReshapeDataToWindowed(dXTimeseriesData[sKey])
+                                                             for sKey in dXTimeseriesData.keys()], axis=0))
         elif self.sDecomp=='PLS-DA':
             aX = np.concatenate([dXTimeseriesData[sKey] for sKey in dXTimeseriesData.keys()])
             dY=od()
@@ -99,9 +101,9 @@ class cDataAugmenter:
             self.cSubspace = cDimReducer.fit(aX, aY)
             self.cSubspace.inverse_transform=self._fInverseTransform
 
-    def fReshapeDataToWindowed(self, aArray, iWindowShape=3):
+    def fReshapeDataToWindowed(self, aArray):
         """
-        Reshapes nTimepoints x nROI data to shape iWindowShape X (nROI X iWindowShape) data
+        Reshapes nTimepoints x nROI data to shape iWindowShape X nROI X iTimepoints-(iWindowShape-1) data
 
         For example,
             ROI1    ROI2    ...
@@ -123,18 +125,18 @@ class cDataAugmenter:
         :return: aReshapedArray (array) reshaped as described above
         """
         # set up shape of new array
-        aReshapedArray=np.zeros((iWindowShape, aArray.shape[1], aArray.shape[0]-(iWindowShape-1)))
+        aReshapedArray=np.zeros((self.iWindow, aArray.shape[1], aArray.shape[0]-(self.iWindow-1)))
 
         # fill new array
         for i in range(aReshapedArray.shape[2]):
-            aReshapedArray[:,:,i]=aArray[i:i+iWindowShape, :]
+            aReshapedArray[:,:,i]=aArray[i:i+self.iWindow, :]
 
         # reshape into final shape required for PCA
-        aReshapedArray=[aReshapedArray[:,:,i].flatten() for i in range(aReshapedArray.shape[2])]
+        aReshapedArray=np.array([aReshapedArray[:,:,i].flatten() for i in range(aReshapedArray.shape[2])])
 
-        return np.array(aReshapedArray)
+        return aReshapedArray
 
-    def fWindowedToTimeseries(self, aArray, iWindowShape=3):
+    def fWindowedToTimeseries(self, aArray):
         """
         Reshapes iWindowShape X (nROI X iWindowShape) data to nTimepoints x nROI
 
@@ -159,19 +161,19 @@ class cDataAugmenter:
         """
         # set up shape of new arrays
         # This one is time in 3rd axis, each timepoint in 1st axis
-        aReshapedArray = np.zeros((iWindowShape, int(aArray.shape[1]/iWindowShape), aArray.shape[0]))
-        aFinalReshapedArray = np.empty((aArray.shape[0]+(iWindowShape-1), int(aArray.shape[1]/iWindowShape),
+        aReshapedArray = np.zeros((self.iWindow, int(aArray.shape[1]/self.iWindow), aArray.shape[0]))
+        aFinalReshapedArray = np.empty((aArray.shape[0]+(self.iWindow-1), int(aArray.shape[1]/self.iWindow),
                                        aArray.shape[0]))*np.nan
 
         # split into each window with time along 3rd axis
-        iROIs=int(aArray.shape[1]/iWindowShape)
+        iROIs=int(aArray.shape[1]/self.iWindow)
         for i in range(aReshapedArray.shape[2]):
-            for j in range(iWindowShape):
+            for j in range(self.iWindow):
                 aReshapedArray[j,:,i]=aArray[i,iROIs*j:iROIs*(j+1)]
 
         # fill new array by stacking previous arrays with each new one offest from old by one
-        for i in range(aFinalReshapedArray.shape[0]-(iWindowShape-1)):
-            aFinalReshapedArray[i:iWindowShape+i, :, i]=aReshapedArray[:,:,i]
+        for i in range(aFinalReshapedArray.shape[0]-(self.iWindow-1)):
+            aFinalReshapedArray[i:self.iWindow+i, :, i]=aReshapedArray[:,:,i]
 
         # average windows
         aFinalReshapedArray=np.nanmean(aFinalReshapedArray, axis=2)
@@ -194,8 +196,9 @@ class cDataAugmenter:
         """
         # dXData in latent space
         self.dXData_LatentSpace = od()
-        self.dXData_LatentSpace.update({sKey: self.cSubspace.transform(self.fReshapeDataToWindowed(
-                                                                        dXTimeseriesData[sKey])) for sKey in dXTimeseriesData.keys()})
+        self.dXData_LatentSpace.update({sKey: self.cSubspace.transform(
+            self.fReshapeDataToWindowed(dXTimeseriesData[sKey])) for sKey in dXTimeseriesData.keys()
+        })
         self.aXData = self.fMakeArrayFromDict(dXTimeseriesData)
         self.aXData_LatentSpace = self.fMakeArrayFromDict(self.dXData_LatentSpace)
 
@@ -360,10 +363,13 @@ if __name__ == '__main__':
     #######
     # Set parameters for augmentation
     lsSamples = [500, 1000, 5000, 10000, 25000, 50000]#[500, 1000, 5000, 10000, 25000, 50000]
-    lsDecomp = ['PCA', 'ICA']#['PCA', 'ICA','PLS-DA']
-    lsNoiseTo = ['None', 'finaltimeseries','components', 'both']#['None', 'finaltimeseries','components','both']
+    # Preliminary tests show PCA had higher performance
+    lsDecomp = ['PCA']#['PCA', 'ICA','PLS-DA']
+    # Preliminary tests show noise in both leads to a higher performance
+    lsNoiseTo = ['both']#['None', 'finaltimeseries','components','both']
+    iWindow = [1,3,5,7]#[1,3,5,7]
     iSplits = 3
-    lsCombos = list(itertools.product(*[lsSamples, lsDecomp, lsNoiseTo]))
+    lsCombos = list(itertools.product(*[lsSamples, lsDecomp, lsNoiseTo, iWindow]))
     #lsCombos.insert(0, (0, 'None', 'None')) #(a control to insert)
     iMaxEpochs=300
     os.nice(5)
@@ -385,10 +391,18 @@ if __name__ == '__main__':
             'Final Test AUC ROC',
             'Generalization Error (Val-Te ROC AUC)'
     ])
+
+    try:
+        iTrial=sys.argv[1]
+    except:
+        iTrial=0
+
     #######
-    for iAugExperiment, (iSamples, sDecomp, sNoiseTo) in enumerate(lsCombos):
+    for iAugExperiment, (iSamples, sDecomp, sNoiseTo, iWindow) in enumerate(lsCombos):
+        ###
         sSavePath=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/TrainedModels/Augmented/' \
-            f'{sDecomp}Decomposition_{sNoiseTo.title()}Noise_{iSamples}xAugmented_Windowed'
+            f'{sDecomp}Decomposition_{sNoiseTo.title()}Noise_{iSamples}xAugmented_Windowsize{iWindow}_Trial{iTrial}'
+        ###
         pdAugmentationResults.loc[iAugExperiment]['Augmentation Method']= sDecomp
         pdAugmentationResults.loc[iAugExperiment]['Noise in timeseries'] = 1 if (sNoiseTo=='both' or
                                                                              sNoiseTo=='finaltimeseries') else 0
@@ -440,14 +454,14 @@ if __name__ == '__main__':
             if sDecomp == 'PLS-DA':
                 dYData = od()
                 dYData.update({sKey: (0 if sKey in dControls.keys() else 1) for sKey in dAll})
-                cIMPAC_Augmenter = cDataAugmenter(dAll, sDecomp=sDecomp, dYData=dYData)
+                cIMPAC_Augmenter = cDataAugmenter(dAll, sDecomp=sDecomp, dYData=dYData, iWindowShape=iWindow)
                 cIMPAC_Control_Augmenter = cIMPAC_Augmenter
                 cIMPAC_ASD_Augmenter = copy.deepcopy(cIMPAC_Augmenter)
                 cIMPAC_Control_Augmenter.fPopulateLatentSpace(dControls)
                 cIMPAC_Control_Augmenter.fPopulateLatentSpace(dASD)
             else:
-                cIMPAC_Control_Augmenter = cDataAugmenter(dControls, sDecomp=sDecomp)
-                cIMPAC_ASD_Augmenter = cDataAugmenter(dASD, sDecomp=sDecomp)
+                cIMPAC_Control_Augmenter = cDataAugmenter(dControls, sDecomp=sDecomp, iWindowShape=iWindow)
+                cIMPAC_ASD_Augmenter = cDataAugmenter(dASD, sDecomp=sDecomp, iWindowShape=iWindow)
 
             # make generator
             print('Producing generator object')
@@ -522,14 +536,14 @@ if __name__ == '__main__':
                 if sDecomp == 'PLS-DA':
                     dYData = od()
                     dYData.update({sKey: (0 if sKey in dControls.keys() else 1) for sKey in dAll})
-                    cIMPAC_Augmenter = cDataAugmenter(dAll, sDecomp=sDecomp, dYData=dYData)
+                    cIMPAC_Augmenter = cDataAugmenter(dAll, sDecomp=sDecomp, dYData=dYData, iWindowShape=iWindow)
                     cIMPAC_Control_Augmenter = cIMPAC_Augmenter
                     cIMPAC_ASD_Augmenter = copy.deepcopy(cIMPAC_Augmenter)
                     cIMPAC_Control_Augmenter.fPopulateLatentSpace(dControls)
                     cIMPAC_Control_Augmenter.fPopulateLatentSpace(dASD)
                 else:
-                    cIMPAC_Control_Augmenter = cDataAugmenter(dControls, sDecomp=sDecomp)
-                    cIMPAC_ASD_Augmenter = cDataAugmenter(dASD, sDecomp=sDecomp)
+                    cIMPAC_Control_Augmenter = cDataAugmenter(dControls, sDecomp=sDecomp, iWindowShape=iWindow)
+                    cIMPAC_ASD_Augmenter = cDataAugmenter(dASD, sDecomp=sDecomp, iWindowShape=iWindow)
 
                 # make generator
                 print('Producing generator object')
@@ -629,9 +643,9 @@ if __name__ == '__main__':
                 flROCAUC, cHistory = fRunDenseNetOnInput_v2('Dense', 8, sSavePath, iEpochs=iMaxEpochs,
                                         sIniPath=None, aXTr=aXTr, aYTr=aYTr, aXTe=aXTe, aYTe=aYTe, bCV=True,
                                                             sTag=f'CV{iCV}')
-                idxBestCV = np.where(cHistory.history['val_acc']==np.max(cHistory.history['val_acc']))[0][0]
-                lsAccTr[iCV] = cHistory.history['acc'][idxBestCV]
-                lsAccVal[iCV] = cHistory.history['val_acc'][idxBestCV]
+                idxBestCV = np.where(cHistory.history['val_accuracy']==np.max(cHistory.history['val_accuracy']))[0][0]
+                lsAccTr[iCV] = cHistory.history['accuracy'][idxBestCV]
+                lsAccVal[iCV] = cHistory.history['val_accuracy'][idxBestCV]
                 lsROCAUCVal[iCV] = flROCAUC
                 iCV+=1
             # cAugRefittedModel.fit(
@@ -644,7 +658,7 @@ if __name__ == '__main__':
             flROCAUC, cHistory = fRunDenseNetOnInput_v2('Dense', 8, sSavePath, iEpochs=iMaxEpochs,
                                                         sIniPath=None, aXTr=aXTr, aYTr=aYTr, aXTe=aXTe, aYTe=aYTe,
                                                         bCV=False, sTag=f'Full')
-            flAcc = cHistory.history['acc'][np.where(cHistory.history['acc']==np.max(cHistory.history['acc']))[0][0]]
+            flAcc = cHistory.history['accuracy'][np.where(cHistory.history['accuracy']==np.max(cHistory.history['accuracy']))[0][0]]
         else:
             print('Have not built Non-augmented method yet')
 

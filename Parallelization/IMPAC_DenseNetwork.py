@@ -437,7 +437,6 @@ def fRunDenseNetOnInput(sInputName, iModelNum, sSavePath, sSubInputName='', iEpo
                                   'ModelHistory.p', 'wb'))
 
     keras.backend.clear_session()
-    tf.reset_default_graph()
     gc.collect()
 
 def fLoadMasterFileOfData(sConn, sInputName, sAtlas=None):
@@ -510,7 +509,7 @@ def fRunDenseNetOnInput_v2(sInputName, iModelNum, sSavePath, iEpochs=1, sIniPath
 
         # generate the network for the cross-validation
         cModel = network_from_ini_2(sIniPath, aInputShape=aDataShape)
-        kerStopping=keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.005, patience=200,
+        kerStopping=keras.callbacks.EarlyStopping(monitor='acc', min_delta=0.01, patience=20,
                                                   restore_best_weights=True)
 
         # Fit with or without CV data for CV and final training respectively
@@ -538,7 +537,6 @@ def fRunDenseNetOnInput_v2(sInputName, iModelNum, sSavePath, iEpochs=1, sIniPath
 
     # Clear memory for next training session
     keras.backend.clear_session()
-    tf.reset_default_graph()
     gc.collect()
 
     return flROCScore, history
