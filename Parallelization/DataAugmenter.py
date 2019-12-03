@@ -25,6 +25,7 @@ import sys
 import itertools
 import copy
 import numpy as np
+import random
 import matplotlib.pyplot as plt
 import pandas as pd
 import nilearn.connectome as nic
@@ -40,8 +41,6 @@ from sklearn.linear_model import RidgeClassifier
 from sklearn.metrics import roc_auc_score
 from sklearn.cross_decomposition import PLSRegression
 from IMPAC_DenseNetwork import fRunDenseNetOnInput_v2
-np.random.seed(42)
-
 
 class cDataAugmenter:
     def __init__(self, dXTimeseriesData, sDecomp='PCA', dYData=None, dXAdditionalData=None, iWindowShape=3):
@@ -225,9 +224,10 @@ class cDataAugmenter:
         Generator function that generates new random combination of other timeseries
         :return: a New timeseries using a random combination of the other timeseries
         """
-        # ensure reproducability by setting seed
+        # # ensure reproducability by setting seed
+        # set globally outside
         iGeneration = 0
-        np.random.seed(iGeneration)
+        # np.random.seed(iGeneration)
         while True:
             if sNoiseTo == 'finaltimeseries':
                 # pull a random timeseries
@@ -396,6 +396,10 @@ if __name__ == '__main__':
         iTrial=sys.argv[1]
     except:
         iTrial=0
+
+    # set seed based on trial number
+    random.seed(int(iTrial))
+    np.random.seed(int(iTrial))
 
     #######
     for iAugExperiment, (iSamples, sDecomp, sNoiseTo, iWindow) in enumerate(lsCombos):

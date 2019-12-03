@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=AugmentedDenseNet
-#SBATCH --partition=GPUv100s
+#SBATCH --partition=GPUp100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=5-12:00:00
@@ -14,7 +14,7 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=72
+CORES_PER_TASK=56
 
 # Load and setup task
 module load python/3.6.4-anaconda
