@@ -152,7 +152,7 @@ def fPermuteAllFeatures(nPermutations, cModel, aActual, pdData):
 
     # make a compiled predictor for the Neural network
     if sModelType=='Dense' or sModelType=='LSTM':
-        cPredictor=k.models.Model(inputs=cModel.inputs, outputs=cModel.outputs)
+        cPredictor = k.models.Model(inputs=cModel.inputs, outputs=cModel.outputs)
         cPredictor._make_predict_function()
     else:
         cPredictor=None
@@ -181,7 +181,7 @@ def fPermuteAllModels(nPermutations, aActual, dData, dModels):
     # for each model in the dictionary, calculate the importance per feature via permutation
     for sModel in list(dModels.keys()):
         dFeatureImportance = fPermuteAllFeatures(nPermutations, dModels[sModel], aActual, dData[sModel])
-        sDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/AtlasResolutionComparison{nPermutations}Permutations'
+        sDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/AtlasResolutionComparison{nPermutations}Permutations'
         if not os.path.isdir(sDir):
             os.mkdir(sDir)
         pkl.dump(dFeatureImportance, open(os.path.join(sDir,f'{sModel}Importances.p'), 'wb'))
@@ -370,69 +370,56 @@ if '__main__'==__name__:
     # NOTE, this uses the full model, not the output predictions
     # load up the models and the data
     dModels = {
-               'Model1': fLoadModels('Dense', 'connectivity', 'basc064', 46)[0],
-               'Model2': fLoadModels('Dense', 'connectivity', 'basc122', 2)[0],
-               'Model3': fLoadModels('Dense', 'connectivity', 'basc197', 32)[0],
-               'Model4': fLoadModels('LinRidge', 'connectivity', 'basc064')[0],
-               'Model5': fLoadModels('LinRidge', 'connectivity', 'basc122')[0],
-               'Model6': fLoadModels('LinRidge', 'connectivity', 'basc197')[0],
-               'Model7': fLoadModels('Dense', 'combined', 'basc064', 43)[0],
-               'Model8': fLoadModels('Dense', 'combined', 'basc122', 39)[0],
-               'Model9': fLoadModels('Dense', 'combined', 'basc197', 15)[0],
-               'Model10': fLoadModels('LinRidge', 'combined', 'basc064')[0],
-               'Model11': fLoadModels('LinRidge', 'combined', 'basc122')[0],
-               'Model12': fLoadModels('LinRidge', 'combined', 'basc197')[0],
-               'Model13': fLoadModels('Dense', 'anatomy', iModelNum=44)[0],
-               'Model14': fLoadModels('LinRidge', 'anatomy')[0]
+        # # 1st best models
+        # 'Model1': fLoadModels('Dense', 'combined', 'basc064', 43)[0],
+        # 'Model2': fLoadModels('Dense', 'combined', 'basc122', 39)[0],
+        # 'Model3': fLoadModels('Dense', 'combined', 'basc197', 15)[0],
+        # # 2nd best models
+        # 'Model4': fLoadModels('Dense', 'combined', 'basc064', 21)[0],
+        # 'Model5': fLoadModels('Dense', 'combined', 'basc122', 7)[0],
+        # 'Model6': fLoadModels('Dense', 'combined', 'basc197', 18)[0],
+        # 3rd best models
+        # 'Model7': fLoadModels('Dense', 'combined', 'basc064', 2)[0],
+        # 'Model8': fLoadModels('Dense', 'combined', 'basc122', 2)[0],
+        # 'Model9': fLoadModels('Dense', 'combined', 'basc197', 25)[0],
+        # 4th best models
+        # 'Model10': fLoadModels('Dense', 'combined', 'basc064', 31)[0],
+        # 'Model11': fLoadModels('Dense', 'combined', 'basc122', 22)[0],
+        # 'Model12': fLoadModels('Dense', 'combined', 'basc197', 6)[0],
+        # 5th best models
+        'Model13': fLoadModels('Dense', 'combined', 'basc064', 22)[0],
+        'Model14': fLoadModels('Dense', 'combined', 'basc122', 15)[0],
+        'Model15': fLoadModels('Dense', 'combined', 'basc197', 2)[0]
     }
 
     # Reformat the data to the right form
     dFormattedXData = {
-        'Model1': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('anatomy') or
-                                                                                   x.__contains__('Site') or
-                                                                                   x.__contains__('Sex(F=1)') or
-                                                                                   x.__contains__('Age'))],axis=1),
-        'Model2': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('anatomy') or
-                                                                                   x.__contains__('Site') or
-                                                                                   x.__contains__('Sex(F=1)') or
-                                                                                   x.__contains__('Age'))],axis=1),
-        'Model3': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('anatomy') or
-                                                                                   x.__contains__('Site') or
-                                                                                   x.__contains__('Sex(F=1)') or
-                                                                                   x.__contains__('Age'))],axis=1),
-        'Model4': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('anatomy') or
-                                                                                   x.__contains__('Site') or
-                                                                                   x.__contains__('Sex(F=1)') or
-                                                                                   x.__contains__('Age'))],axis=1),
-        'Model5': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('anatomy') or
-                                                                                   x.__contains__('Site') or
-                                                                                   x.__contains__('Sex(F=1)') or
-                                                                                   x.__contains__('Age'))],axis=1),
-        'Model6': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('anatomy') or
-                                                                                   x.__contains__('Site') or
-                                                                                   x.__contains__('Sex(F=1)') or
-                                                                                   x.__contains__('Age'))],axis=1),
-        'Model7': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        'Model8': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        'Model9': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        'Model10': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        'Model11': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        'Model12': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        'Model13': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('ROI')or
-                                                                                    x.__contains__('Age'))], axis=1),
-        'Model14': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('ROI')or
-                                                                                    x.__contains__('Age'))], axis=1)
+        # 'Model1': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model2': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model3': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model4': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model5': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model6': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model7': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model8': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model9': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model10': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model11': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        # 'Model12': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        'Model13': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        'Model14': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        'Model15': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
     }
 
     # Permute the models
-    nPermutations = 4
+    nPermutations = 8
     dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData, dFormattedXData, dModels)
 
     # Save it
-    sSaveDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/'\
+    sSaveDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/PFI'\
         f'AtlasResolutionComparison{nPermutations}Permutations'
 
-    if not os.path.isdir(sSaveDir): os.mkdir(sSaveDir)
+    if not os.path.isdir(sSaveDir): os.mkdirs(sSaveDir)
 
     pkl.dump(dFeatureImportanceByModel, open(os.path.join(
-        sSaveDir,f'AllTSEFeatureImportances{nPermutations}Permutations.p'),'wb'))
+        sSaveDir,f'AllTSEFeatureImportances{nPermutations}Permutations.p'), 'wb'))

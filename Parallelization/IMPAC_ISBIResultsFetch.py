@@ -159,11 +159,11 @@ pickle.dump(pdFinalModelNumbers, open('/project/bioinformatics/DLLab/Cooper/Code
 dTopTen = {}
 dTopTen['Dense'] = {}
 dTopTen['LSTM'] = {}
-for sAtlas in ['basc064', 'basc122', 'basc197', 'craddock_scorr_mean', 'power_2011']:
+for sAtlas in lsAtlases:
     dTopTen['Dense'].update({sAtlas: list(dResults['Dense']['combined'][sAtlas].sort_values('Avg CV ROC AUC',
-                                                   ascending=False).index[0:10])})
+                                                   ascending=False).index[0:5])})
     dTopTen['LSTM'].update({sAtlas: list(dResults['LSTM']['combined'][sAtlas].sort_values('Avg CV ROC AUC',
-                                                   ascending=False).index[0:10])})
+                                                   ascending=False).index[0:5])})
 
 pickle.dump(dTopTen, open('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
                                  '/TrainedModels/ISBIRerun/TopTens.p', 'wb'))

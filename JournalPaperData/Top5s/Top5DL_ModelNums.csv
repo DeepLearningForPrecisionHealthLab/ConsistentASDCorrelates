@@ -1,0 +1,16 @@
+,Dense Network,LSTM Network,BrainNetCNN
+Anatomical Volumetric Data Alone,"[44, 41, 23, 0, 48]","[8, 43, 1, 49, 4]",
+Connectivity using the BASC Atlas with 64 Parcellations,"[46, 43, 31, 14, 23]","[8, 4, 43, 41, 1]","[8, 18, 1, 3, 9]"
+Connectivity using the BASC Atlas with 122 Parcellations,"[2, 15, 36, 28, 18]","[49, 43, 1, 8, 31]","[8, 14, 7, 10, 1]"
+Connectivity using the BASC Atlas with 197 Parcellations,"[32, 36, 7, 25, 15]","[31, 43, 8, 1, 49]","[18, 7, 3, 4, 10]"
+Connectivity using the Craddock Atlas with X Parcellations,"[15, 2, 18, 25, 29]","[49, 1, 8, 4, 31]","[18, 7, 4, 3, 8]"
+Connectivity using the Harvard-Oxford Atlas with X Parcellations,"[47, 6, 8, 18, 1]","[4, 1, 22, 41, 49]","[3, 8, 7, 5, 18]"
+Connectivity using the MSDL Atlas with X Parcellations,"[8, 3, 47, 5, 39]","[4, 1, 31, 41, 46]","[4, 7, 14, 46, 8]"
+Connectivity using the Power Atlas with X Parcellations,"[15, 2, 36, 23, 47]","[8, 1, 31, 43, 4]","[8, 7, 4, 3, 18]"
+Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 64 Parcellations,"[43, 21, 2, 31, 22]","[9, 49, 31, 46, 8]",
+Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations,"[39, 7, 2, 22, 15]","[1, 49, 31, 8, 43]",
+Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 197 Parcellations,"[15, 18, 25, 6, 2]","[8, 49, 43, 1, 31]",
+Combined Anatomical Volumetric Data and Connectivity with the Craddock Atlas with X Parcellations,"[15, 2, 36, 25, 18]","[1, 8, 4, 49, 43]",
+Combined Anatomical Volumetric Data and Connectivity with the Harvard-Oxford Atlas with X Parcellations,"[12, 15, 1, 22, 0]","[1, 4, 43, 3, 8]",
+Combined Anatomical Volumetric Data and Connectivity with the MSDL Atlas with X Parcellations,"[49, 17, 14, 7, 21]","[4, 1, 9, 8, 49]",
+Combined Anatomical Volumetric Data and Connectivity with the Power Atlas with X Parcellations,"[2, 32, 18, 15, 26]","[49, 1, 43, 4, 8]",

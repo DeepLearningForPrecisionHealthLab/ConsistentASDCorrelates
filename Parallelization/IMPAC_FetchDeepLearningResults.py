@@ -18,63 +18,42 @@ sMLModelLocation = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Resu
 sSaveLocation = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/MLDeepSummaryData'
 
 # The names of the Deep Learning algorithms used, to label data frame
-# lsDLAlgorithms = [
-#     'Dense Network',
-#     'LSTM Network'
-# ]
-
 lsDLAlgorithms = [
-    'Dense Network'
+    'Dense Network',
+    'LSTM Network'
 ]
 
-#
-#lsDLTags = ['Dense', 'LSTM']
-lsDLTags = ['Dense']
+lsDLTags = ['Dense', 'LSTM']
 
 # The names of the types of input data used, to label data frame
-# lsInputNames = [
-#     'Anatomical Volumetric Data Alone',
-#     'Connectivity using the BASC Atlas with 64 Parcellations',
-#     'Connectivity using the BASC Atlas with 122 Parcellations',
-#     'Connectivity using the BASC Atlas with 197 Parcellations',
-#     'Connectivity using the Craddock Atlas with X Parcellations',
-#     'Connectivity using the Harvard-Oxford Atlas with X Parcellations',
-#     'Connectivity using the MSDL Atlas with X Parcellations',
-#     'Connectivity using the Power Atlas with X Parcellations',
-#     'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 64 Parcellations',
-#     'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations',
-#     'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 197 Parcellations',
-#     'Combined Anatomical Volumetric Data and Connectivity with the Craddock Atlas with X Parcellations',
-#     'Combined Anatomical Volumetric Data and Connectivity with the Harvard-Oxford Atlas with X Parcellations',
-#     'Combined Anatomical Volumetric Data and Connectivity with the MSDL Atlas with X Parcellations',
-#     'Combined Anatomical Volumetric Data and Connectivity with the Power Atlas with X Parcellations',
-# ]
 lsInputNames = [
-    # 'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations',
-    'Connectivity using the MSDL Atlas with X Parcellations'
+    'Anatomical Volumetric Data Alone',
+    'Connectivity using the BASC Atlas with 64 Parcellations',
+    'Connectivity using the BASC Atlas with 122 Parcellations',
+    'Connectivity using the BASC Atlas with 197 Parcellations',
+    'Connectivity using the Craddock Atlas with X Parcellations',
+    'Connectivity using the Harvard-Oxford Atlas with X Parcellations',
+    'Connectivity using the MSDL Atlas with X Parcellations',
+    'Connectivity using the Power Atlas with X Parcellations',
+    'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 64 Parcellations',
+    'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 122 Parcellations',
+    'Combined Anatomical Volumetric Data and Connectivity with the BASC Atlas with 197 Parcellations',
+    'Combined Anatomical Volumetric Data and Connectivity with the Craddock Atlas with X Parcellations',
+    'Combined Anatomical Volumetric Data and Connectivity with the Harvard-Oxford Atlas with X Parcellations',
+    'Combined Anatomical Volumetric Data and Connectivity with the MSDL Atlas with X Parcellations',
+    'Combined Anatomical Volumetric Data and Connectivity with the Power Atlas with X Parcellations',
 ]
 
 # The tags of the types of input data used, to fetch the data
-# lsInputTags = [
-#     'anatomy', 'connectivitybasc064', 'connectivitybasc122', 'connectivitybasc197',
-#     'connectivitycraddock_scorr_mean', 'connectivityharvard_oxford_cort_prob_2mm', 'connectivitymsdl',
-#     'connectivitypower_2011', 'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
-#     'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
-#     'combinedpower_2011'
-# ]
-
 lsInputTags = [
-#     'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
-#     'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
-#     'combinedpower_2011'
-# ]
-    'connectivitymsdl'
+    'anatomy', 'connectivitybasc064', 'connectivitybasc122', 'connectivitybasc197',
+    'connectivitycraddock_scorr_mean', 'connectivityharvard_oxford_cort_prob_2mm', 'connectivitymsdl',
+    'connectivitypower_2011', 'combinedbasc064', 'combinedbasc122', 'combinedbasc197',
+    'combinedcraddock_scorr_mean', 'combinedharvard_oxford_cort_prob_2mm', 'combinedmsdl',
+    'combinedpower_2011'
 ]
 
 # The names of the Metrics used, to label dataFrame
-#lsMetrics = ['Accuracy', 'Area Under Precision-Recall Curve',
-#             'F1 Score', 'Area Under ROC Curve']
-
 lsMetrics = ['Area Under ROC Curve']
 
 # Initialize dictionary to hold data for each DL Framework
@@ -84,12 +63,6 @@ dPerformanceByDLAlg = {}
 # contains a dictionary containing the different metrics used and a pandas
 # dataframe. The dataframe has columns for each input (anatomical alone,
 # atlas1, atlas2, etc) and rows for each architecture attempted
-# for sDLAlgorithm in lsDLAlgorithms:
-#     dPerformanceByDLAlg.update({sDLAlgorithm: {lsMetrics[0]: pd.DataFrame(columns=lsInputNames, index=range(50)),
-#                                                lsMetrics[1]: pd.DataFrame(columns=lsInputNames, index=range(50)),
-#                                                lsMetrics[2]: pd.DataFrame(columns=lsInputNames, index=range(50)),
-#                                                lsMetrics[3]: pd.DataFrame(columns=lsInputNames, index=range(50))
-#                                                }})
 for sDLAlgorithm in lsDLAlgorithms:
     dPerformanceByDLAlg.update({sDLAlgorithm: {lsMetrics[0]: pd.DataFrame(columns=lsInputNames, index=range(50)),
                                                }})

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --job-name=BiomarkerID_8x
-#SBATCH --partition=256GBv1
+#SBATCH --partition=GPUv100s
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=16-00:00:00
@@ -14,12 +14,12 @@ echo "Job start: $now"
 module load parallel
 
 # SRUN arguments
-CORES_PER_TASK=56
+CORES_PER_TASK=72
 
 # Setup to run
 module load python/3.6.4-anaconda
 cd /project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/
-source activate /project/bioinformatics/DLLab/shared/CondaEnvironments/CooperAuttfGPUv4
+source activate /project/bioinformatics/DLLab/shared/CondaEnvironments/CooperAutismTF_GPU_v5
 
 # Run the file
 python BioMarkerIdentification.py

@@ -240,11 +240,11 @@ strCsvSubjectCol = 'Subject ID'  # Name of column for subject ID
 strCsvSessionCol = 'Session'  # Name of column for session
 
 # Global variables common to CONN and DLLabPipeline
-strRootDir = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization'
-strStudyName = 'ABIDETest_v2'
+strRootDir = '/project/bioinformatics/DLLab/STUDIES/ABIDE2/'
+strStudyName = ''
 strDerivativeName = 'DLLabPipeline'
-strJobName = 'ABIDETest_v2'
-strDataDir = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/ABIDETest_v2/Source/'
+strJobName = 'ABIDE2_NYU2'
+strDataDir = '/project/bioinformatics/DLLab/STUDIES/ABIDE2/Source/GroupBySite/ABIDEII-NYU_2'
 bCopy = False  # if False, don't copy subjects at all
 bAllSubjects = False  # if True, copy all subjects from strDataDir, else copy subjects listed in lsSubjects
 
@@ -275,23 +275,24 @@ lsConnAtlasNames =[
     'BASC_064',
     'BASC_122',
     'BASC_197',
-    'me'
-    'dsfsdfHarvardOxford',
+
+    'HarvardOxford',
     'Craddock'
 ]
 lsConnAtlasPaths =[
     '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/ABIDE_Atlases/msdl_atlas/MSDL_rois'
-    '/msdl_rois.nii',
+        '/msdl_rois.nii',
     '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/ABIDE_Atlases/basc_multiscale_2015'
-    '/template_cambridge_basc_multiscale_nii_sym/template_cambridge_basc_multiscale_sym_scale064.nii.gz',
+        '/template_cambridge_basc_multiscale_nii_sym/template_cambridge_basc_multiscale_sym_scale064.nii.gz',
     '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/ABIDE_Atlases/basc_multiscale_2015'
-    '/template_cambridge_basc_multiscale_nii_sym/template_cambridge_basc_multiscale_sym_scale122.nii.gz',
+        '/template_cambridge_basc_multiscale_nii_sym/template_cambridge_basc_multiscale_sym_scale122.nii.gz',
     '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/ABIDE_Atlases/nilearn_data'
-    '/basc_multiscale_2015/template_cambridge_basc_multiscale_nii_sym/template_cambridge_basc_multiscale_sym_scale197.nii.gz',
+        '/basc_multiscale_2015/template_cambridge_basc_multiscale_nii_sym/template_cambridge_basc_multiscale_sym_scale197.nii.gz',
     '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/ABIDE_Atlases/nilearn_data/fsl/data'
-    '/atlases/HarvardOxford/HarvardOxford-cort-prob-2mm.nii.gz',
+        '/atlases/HarvardOxford/HarvardOxford-cort-prob-2mm.nii.gz',
     '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/ABIDE_Atlases/nilearn_data/craddock_2012/scorr05_mean_all.nii.gz'
 ]
+
 for iAtlasNum in range(len(lsConnAtlasNames)):
     if iAtlasNum==0:
         sConnAtlases=f'{lsConnAtlasNames[iAtlasNum]}'
@@ -306,7 +307,7 @@ bDMRI = False
 nNodes = 10
 nCpu = 4  # cpus_per_task in param_runner.yaml
 strTimeLimit = '20-4:15:00'
-nMaxSubjects = 151  # Total number of subjects to be processed
+nMaxSubjects = len(glob.glob(f'{strDataDir}/sub*'))  # Total number of subjects to be processed
 
 #################################### user editing zone ends ###########################################
 
