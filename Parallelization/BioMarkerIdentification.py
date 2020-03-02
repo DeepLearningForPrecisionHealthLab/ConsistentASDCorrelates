@@ -371,21 +371,21 @@ if '__main__'==__name__:
     # load up the models and the data
     dModels = {
         # # 1st best models
-        # 'Model1': fLoadModels('Dense', 'combined', 'basc064', 43)[0],
-        # 'Model2': fLoadModels('Dense', 'combined', 'basc122', 39)[0],
-        # 'Model3': fLoadModels('Dense', 'combined', 'basc197', 15)[0],
+        'Model1': fLoadModels('Dense', 'combined', 'basc064', 43)[0],
+        'Model2': fLoadModels('Dense', 'combined', 'basc122', 39)[0],
+        'Model3': fLoadModels('Dense', 'combined', 'basc197', 15)[0],
         # # 2nd best models
-        # 'Model4': fLoadModels('Dense', 'combined', 'basc064', 21)[0],
-        # 'Model5': fLoadModels('Dense', 'combined', 'basc122', 7)[0],
-        # 'Model6': fLoadModels('Dense', 'combined', 'basc197', 18)[0],
+        'Model4': fLoadModels('Dense', 'combined', 'basc064', 21)[0],
+        'Model5': fLoadModels('Dense', 'combined', 'basc122', 7)[0],
+        'Model6': fLoadModels('Dense', 'combined', 'basc197', 18)[0],
         # 3rd best models
-        # 'Model7': fLoadModels('Dense', 'combined', 'basc064', 2)[0],
-        # 'Model8': fLoadModels('Dense', 'combined', 'basc122', 2)[0],
-        # 'Model9': fLoadModels('Dense', 'combined', 'basc197', 25)[0],
+        'Model7': fLoadModels('Dense', 'combined', 'basc064', 2)[0],
+        'Model8': fLoadModels('Dense', 'combined', 'basc122', 2)[0],
+        'Model9': fLoadModels('Dense', 'combined', 'basc197', 25)[0],
         # 4th best models
-        # 'Model10': fLoadModels('Dense', 'combined', 'basc064', 31)[0],
-        # 'Model11': fLoadModels('Dense', 'combined', 'basc122', 22)[0],
-        # 'Model12': fLoadModels('Dense', 'combined', 'basc197', 6)[0],
+        'Model10': fLoadModels('Dense', 'combined', 'basc064', 31)[0],
+        'Model11': fLoadModels('Dense', 'combined', 'basc122', 22)[0],
+        'Model12': fLoadModels('Dense', 'combined', 'basc197', 6)[0],
         # 5th best models
         'Model13': fLoadModels('Dense', 'combined', 'basc064', 22)[0],
         'Model14': fLoadModels('Dense', 'combined', 'basc122', 15)[0],

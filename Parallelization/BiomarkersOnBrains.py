@@ -89,19 +89,21 @@ def fMatchCoordinates(aConnections, aCoordinates):
 def fPlotFinal(aConnections, lsNonzeroCoordinates, sSaveDir, iModel, iPermutations, flThresh):
     # Make the final plot
     cDisplay=plotting.plot_connectome(aConnections, lsNonzeroCoordinates,
-                                      edge_vmin=6,
-                                      edge_vmax=15,
+                                      edge_vmin=5,
+                                      edge_vmax=8,
+                                      #node_color='k',
                                       colorbar=True,
-                                      edge_cmap="jet",
+                                      edge_cmap="rainbow",
                                       alpha=0.5,
                                       title='Plot')
 
     cInteractiveDisplay=plotting.view_connectome(aConnections, lsNonzeroCoordinates)
-
-    print(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.png'))
-    cDisplay.savefig(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.png'))
-    plt.savefig(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.png'))
-    cInteractiveDisplay.save_as_html(os.path.join(sSaveDir, f'Model{iModel}Biomarkers{iPermutations}Permutations.html'))
+    dKey = {1: '64', 2: '122', 3: '197'}
+    sDir = os.path.join(sSaveDir, f'{dKey[iModel]}ROI_Biomarkers{iPermutations}Permutations')
+    print(sDir)
+    cDisplay.savefig(f'{sDir}.png')
+    plt.savefig(f'{sDir}.png')
+    cInteractiveDisplay.save_as_html(f'{sDir}.html')
     plt.close()
     del(cDisplay)
     del(cInteractiveDisplay)
@@ -115,20 +117,35 @@ def fFormatImportances(dImportances):
 
     return pdImportances
 
-def fBarPlotImportances(pdImportances, sDir, iPermutations, iModel):
+def fBarPlotImportances(pdImportances, sDir, iPermutations, iModel, sType='Functional'):
     pdImportances=pdImportances.sort_values(by=['Importance'], axis=0, ascending=False)
+    if sType=='Functional':
+        pdImportances = pdImportances.loc[[idx for idx in pdImportances.index if 'ROI' in idx.upper()]]
+    elif sType=='All':
+        pass
+    elif sType=='Structural':
+        pdImportances = pdImportances.loc[[idx for idx in pdImportances.index if 'anatomy' in idx.lower()]]
+    elif sType=='Confounds':
+        pdImportances = pdImportances.loc[[idx for idx in pdImportances.index if not 'anatomy' in idx.lower()]]
+        pdImportances = pdImportances.loc[[idx for idx in pdImportances.index if not 'ROI' in idx.upper()]]
+
     fig, ax=plt.subplots()
     pdImportances.head(15).plot(kind='barh', ax=ax)
+
+    dKey = {1: '64', 2: '122', 3: '197'}
     ax.set_xlabel='Importance (\u03C3 from mean feature importance)'
     plt.tight_layout()
-    plt.savefig(os.path.join(sDir, f'Model{iModel}Features{iPermutations}Permutations.png'))
+    plt.savefig(os.path.join(sDir, f'{dKey[iModel]}ROI_{sType}Biomarkers{iPermutations}PermutationsBarplot.png'))
     plt.close()
 
 def fProcessModel(iModel, sAtlas, iPermutations, sDir, flThresh, iTop):
     # Load importances
-    dImportances = pkl.load(open(os.path.join(sDir, f'Model{iModel}Importances.p'), 'rb'))
+    #dImportances = pkl.load(open(os.path.join(sDir, f'Model{iModel}Importances.p'), 'rb'))
+    dKey={1:'64', 2:'122', 3:'197'}
+    dImportances = pkl.load(open(os.path.join(sDir, f'{dKey[iModel]}ROI_MeanImportances.p'), 'rb'))
     pdImportances = fFormatImportances(dImportances)
-    fBarPlotImportances(pdImportances, sDir, iPermutations, iModel)
+    for sType in ['All', 'Functional', 'Structural', 'Confounds']:
+        fBarPlotImportances(pdImportances, sDir, iPermutations, iModel, sType=sType)
 
     # make plots
     if not sAtlas=='anat':
@@ -151,20 +168,10 @@ if __name__=='__main__':
 
     # Set atlases per model
     dModelAtlases={
-        #1:'scale064',
-        #2:'scale122',
-        3:'scale197',
-        # 4:'scale064',
-        # 5:'scale122'#,
-        # 6:'scale197',
-        # 7:'scale064',
-        # 8:'scale122',
-        # 9:'scale197',
-        # 10:'scale064',
-        # 11:'scale122',
-        # 12:'scale197',
-        # 13:'anat',
-        # 14:'anat'
+        1:'scale064',
+        2:'scale122',
+        3:'scale197'
+        # 4:'anat'
     }
 
     for iModel, sAtlasKey in dModelAtlases.items():
@@ -175,6 +182,7 @@ if __name__=='__main__':
             sAtlas='anat'
 
         # Process the model and make the glass brain
-        iPermutations=1
-        sDir = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AlternateMetrics/AtlasResolutionComparison{iPermutations}Permutations'
-        fProcessModel(iModel, sAtlas, iPermutations, sDir=sDir, flThresh=6, iTop=26)
+        iPermutations=8
+        sDir = f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/AtlasResolutionComparison' \
+            f'{iPermutations}Permutations'
+        fProcessModel(iModel, sAtlas, iPermutations, sDir=sDir, flThresh=5, iTop=26)
