@@ -34,6 +34,7 @@ import time
 from joblib import Parallel, delayed
 from joblib import parallel_backend
 from joblib import wrap_non_picklable_objects
+sys.path.append('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/Parallelization/')
 from IMPAC_DenseNetwork import read_config_file
 from IMPAC_DenseNetwork import format_dict
 from IMPAC_DenseNetwork import metrics_from_string
