@@ -55,6 +55,10 @@ __pycache__/
 /Parallelization/IMPAC_Challenge_fMRI_Pipeline/
 /JournalPaperData/AtlasResolutionComparison8Permutations/
 /JournalPaperData/RetestData/
-
+.vscode/
+JournalPaperData/AtlasResolutionComparison64Permutations/
+JournalPaperData/BrodmannAreas/
+JournalPaperData/FeatureImportancesRevamped.pptx
+JournalPaperData/~$FeatureImportancesRevamped.pptx
 
 

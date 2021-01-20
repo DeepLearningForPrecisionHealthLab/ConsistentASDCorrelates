@@ -17,14 +17,14 @@ __status__ = "Prototype"
 
 import os
 import sys
-import matplotlib.pyplot as plt
-plt.style.use('dark_background')
-from mpl_toolkits.mplot3d import Axes3D
+# import matplotlib.pyplot as plt
+# plt.style.use('dark_background')
+# from mpl_toolkits.mplot3d import Axes3D
 import sklearn as sk
 import pickle as pkl
 import dill
 import sklearn.metrics as skm
-import seaborn as sb
+# import seaborn as sb
 import pandas as pd
 import numpy as np
 import keras as k
@@ -40,7 +40,7 @@ from IMPAC_DenseNetwork import format_dict
 from IMPAC_DenseNetwork import metrics_from_string
 from IMPAC_DenseNetwork import get_optimizer_from_config
 from IMPAC_DenseNetwork import add_layer_from_config
-from IMPAC_LSTM import fLoadLSTM
+# from IMPAC_LSTM import fLoadLSTM
 from IMPAC_DenseNetwork import network_from_ini_2
 
 def fPermuteFeature(iPermutationNum, sFeature, pdData):
@@ -89,8 +89,8 @@ def fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData, nP
     :param sFeature: the name of the feature to be permuted
     :param aActual: array of true values
     :param pdData: dataframe with the features to be permuted
-    :return: flFeatureImportance feature importance (float) as measured by base performance
-    minus performance with the feature randomly permuted
+    :return: lsFeatureImportance feature importance (list) as measured by base performance
+        minus performance with the feature randomly permuted
     """
     # initialize variables and create baseline score
     sModelType=fRetreiveModelType(cModel)
@@ -128,11 +128,11 @@ def fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData, nP
     for aPrediction in lsPermutedPredictions:
         lsPermutedScores.append(skm.roc_auc_score(aActual, aPrediction))
 
-    # calculate feature importance (float) as measured by base performance
+    # calculate feature importances (list) as measured by base performance
     # minus performance with the feature randomly permuted
-    flFeatureImportance = flRawScore - np.mean(lsPermutedScores)
+    lsFeatureImportance = [flRawScore - x for x in lsPermutedScores]
 
-    return flFeatureImportance
+    return lsFeatureImportance
 
 def fPermuteAllFeatures(nPermutations, cModel, aActual, pdData):
     """
@@ -160,9 +160,9 @@ def fPermuteAllFeatures(nPermutations, cModel, aActual, pdData):
 
     # loop through each feature, running N permutations on each feature each time
     for sFeature in pdData.columns:
-        flFeaturePerformance = fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData,
+        lsFeaturePerformance = fTestModelNPermutations(nPermutations, cModel, sFeature, aActual, pdData,
                                                        cOutputter=cPredictor)
-        dFeaturePerformances.update({sFeature: flFeaturePerformance})
+        dFeaturePerformances.update({sFeature: lsFeaturePerformance})
 
     return dFeaturePerformances
 
@@ -180,7 +180,7 @@ def fPermuteAllModels(nPermutations, aActual, dData, dModels):
     dFeatureImportanceByModel = {}
 
     # for each model in the dictionary, calculate the importance per feature via permutation
-    for sModel in list(dModels.keys()):
+    for sModel in reversed(list(dModels.keys())):
         dFeatureImportance = fPermuteAllFeatures(nPermutations, dModels[sModel], aActual, dData[sModel])
         sDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/AtlasResolutionComparison{nPermutations}Permutations'
         if not os.path.isdir(sDir):
@@ -190,26 +190,27 @@ def fPermuteAllModels(nPermutations, aActual, dData, dModels):
 
     return dFeatureImportanceByModel
 
-def fPlotFeaturesByImportance(dFeatureImportanceByModel, sModel, sSavePath=None):
-    """
-    Plots features sorted by importance
-    :param dFeatureImportanceByModel: dictionary of feature importances,
-        {sModelType: dFeatureImportance}
-    :param sFeature: string, Model name
-    :param sSavePath: string, save location for fig
-    :return: plot
-    """
-    # organize to pd dataframe, then sort data
-    dFeatureImportance = dFeatureImportanceByModel[sModel]
-    pdFeatureImportance = pd.DataFrame.from_dict(dFeatureImportance)
-    pdFeatureImportance.sort_values(by='col1')
+# NOTE Error in cairo plotting module
+# def fPlotFeaturesByImportance(dFeatureImportanceByModel, sModel, sSavePath=None):
+#     """
+#     Plots features sorted by importance
+#     :param dFeatureImportanceByModel: dictionary of feature importances,
+#         {sModelType: dFeatureImportance}
+#     :param sFeature: string, Model name
+#     :param sSavePath: string, save location for fig
+#     :return: plot
+#     """
+#     # organize to pd dataframe, then sort data
+#     dFeatureImportance = dFeatureImportanceByModel[sModel]
+#     pdFeatureImportance = pd.DataFrame.from_dict(dFeatureImportance)
+#     pdFeatureImportance.sort_values(by='col1')
 
-    # make bar plot
-    pdFeatureImportance.plot(kind='bar')
+#     # make bar plot
+#     pdFeatureImportance.plot(kind='bar')
 
-    # save if location is provided
-    if sSavePath is not None:
-        plt.savefig(sSavePath)
+#     # save if location is provided
+#     if sSavePath is not None:
+#         plt.savefig(sSavePath)
 
 def fLoadData(sNNType, iModelNum, sInputName, sSubInputName):
     # initialize paths
@@ -395,30 +396,30 @@ if '__main__'==__name__:
 
     # Reformat the data to the right form
     dFormattedXData = {
-        # 'Model1': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model2': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model3': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model4': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model5': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model6': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model7': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model8': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model9': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model10': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model11': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        # 'Model12': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        'Model1': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        'Model2': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        'Model3': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        'Model4': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        'Model5': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        'Model6': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        'Model7': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        'Model8': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        'Model9': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        'Model10': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+        'Model11': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+        'Model12': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
         'Model13': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
         'Model14': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
         'Model15': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
     }
 
     # Permute the models
-    nPermutations = 8
+    nPermutations = 64
     dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData, dFormattedXData, dModels)
 
     # Save it
     sSaveDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/PFI'\
-        f'AtlasResolutionComparison{nPermutations}Permutations'
+        f'/AtlasResolutionComparison{nPermutations}Permutations'
 
     if not os.path.isdir(sSaveDir): os.mkdirs(sSaveDir)
 

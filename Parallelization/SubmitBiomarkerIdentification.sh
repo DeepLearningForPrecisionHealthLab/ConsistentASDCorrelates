@@ -1,7 +1,7 @@
 #!/bin/bash
 
-#SBATCH --job-name=BiomarkerID_8x
-#SBATCH --partition=GPUv100s
+#SBATCH --job-name=BiomarkerID_64x
+#SBATCH --partition=GPU4v100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=16-00:00:00
@@ -12,9 +12,6 @@ now=$(date +"%m-%d-%Y,%H:%M:%S")
 echo "Job start: $now"
 
 module load parallel
-
-# SRUN arguments
-CORES_PER_TASK=72
 
 # Setup to run
 module load python/3.6.4-anaconda
