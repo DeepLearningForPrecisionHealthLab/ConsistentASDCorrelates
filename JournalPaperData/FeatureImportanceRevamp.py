@@ -17,17 +17,19 @@ __status__ = "Prototype"
 import os
 import pickle as pkl
 import matplotlib.pyplot as plt
+from numpy.core.numeric import zeros_like
 import seaborn as sns
 sns.set_style('darkgrid')
 import pandas as pd
+import copy
 import numpy as np
 import re
 import json
 import glob
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_ind as spttest_ind
 import re
 from statsmodels.stats.multitest import fdrcorrection
-#from statsmodels.stats.weightstats import ttest_ind
+from statsmodels.stats.weightstats import ttest_ind as smttest_ind
 import matplotlib.transforms as mtrans
 
 def fLoadImportances(sDir = '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/AtlasResolutionComparison64Permutations'):
@@ -61,9 +63,49 @@ def fPValuePermutation(series, df):
     Returns:
         p value (float)
     """
-    _,p,_ = ttest_ind(fGenerateNullDistribution(df.drop(series.name, axis=1, inplace=False)),
+    _,p,_ = smttest_ind(fGenerateNullDistribution(df.drop(series.name, axis=1, inplace=False)),
         series.values, alternative='smaller')
     return p
+
+def fPValueFill(pdData, lsCols, iAtlas, sPath='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/Pvalues'):
+    """replaces raw importance scores with p-values
+
+    Args:
+        pdData: importance dataframe
+        lsCols: list of columns to test (top 45)
+        iAtlas: int: atlas designation
+
+    Returns:
+        pdPvals: p-value dataframe
+    """
+    if not os.path.isfile(f'{sPath}_{iAtlas}.csv'):
+        # initialize holding variables
+        pdPvals=copy.deepcopy(pdData)
+        pdPvals.iloc[:,1:]=np.nan
+        dPosition={
+            64:0,
+            122:1,
+            197:2
+        }
+        # fill in p-values
+        for iRow in range(5):
+            for sCol in lsCols:
+                pdPvals.loc[(dPosition[iAtlas]+3*iRow), sCol] =\
+                    fPValuePermutation(pdData.iloc[iRow:iRow+1,:][sCol], pdData.iloc[iRow:iRow+1,1:])
+
+        #FDR correct to 0.01
+        pdPvals=pdPvals.dropna(axis=1)
+        for i,_ in enumerate(pdPvals.index):
+            pdPvals.iloc[i,1:]=fdrcorrection(pdPvals.iloc[i,1:].dropna().values.flatten(), alpha=0.01, method='negcorr')[1]
+
+        #drop atlas column
+        pdPvals = pdPvals.iloc[:,1:]
+        pdPvals.to_csv(f'{sPath}_{iAtlas}.csv')
+
+    else:
+        pdPvals = pd.read_csv(f'{sPath}_{iAtlas}.csv', index_col=0)
+    
+    return pdPvals
 
 def fGenerateNullDistribution(df):
     """ generates a null distribution of feature importances based on the work from:
@@ -171,7 +213,7 @@ def fTTest(sCol, iAtlas, dXData, aYData):
     pdASD=dXData[sID].loc[np.squeeze(aYData).astype(bool)]
     pdHC=dXData[sID].loc[~np.squeeze(aYData).astype(bool)]
     
-    _, p = ttest_ind(pdASD[sCol].values, pdHC[sCol].values, equal_var=False)
+    _, p = spttest_ind(pdASD[sCol].values, pdHC[sCol].values, equal_var=False)
     diff = pdASD[sCol].mean()-pdHC[sCol].mean()
     return p, diff
 
@@ -195,7 +237,7 @@ def fTTestIcon(sCol, iAtlas,dXData, aYData):
     else:
         return '-'
 
-def fPlot(pdData, iAtlas, ax, dXData, aYData):
+def fPlot(pdData, iAtlas, ax, dXData, aYData, sSort='Median'):
     """plots all the feature importances, their functions, and asd vs hc comparison
 
     Args:
@@ -209,46 +251,79 @@ def fPlot(pdData, iAtlas, ax, dXData, aYData):
     mpl.rc('hatch', linewidth=6)
     sns.set(rc={'axes.facecolor':'gainsboro'})
 
-    sSort='Median'
     pdAtlas = pdData[pdData['Atlas']==iAtlas].transpose().dropna().iloc[1:]
     if sSort=='Mean':
         pdAtlas[sSort] = pdAtlas.mean(axis=1)
+        fEstimator=np.mean
     elif sSort=='Median':
         pdAtlas[sSort] = pdAtlas.median(axis=1)
+        fEstimator=np.median
+    else:
+        raise NotImplementedError
     pdAtlas=pdAtlas/pdAtlas[sSort].std()
     pdPlot=pdAtlas.sort_values(by=sSort, ascending=False).filter(like='ROI', axis=0).head(15).iloc[:,:-1].T
+
     # get ttest results
     lsIcons = [fTTestIcon(x, iAtlas,dXData, aYData) for x in pdPlot.columns]
-
+    pdPval=fPValueFill(pdData[pdData['Atlas']==iAtlas], pdPlot.columns, iAtlas)
+    # reorder p values
+    pdPval=pdPval[list(pdPlot.columns)]
 
     #fetch list of colors
     lsColors = fFetchColor(iAtlas)
 
     # rename ROIs
-    pdPlot = fRenameROIs(pdPlot.transpose(), iAtlas).transpose()
-    # plot the horizontal bar graph
-    pdPlot=pdPlot.melt(var_name='cols', value_name='vals')
+    pdPlot_raw = fRenameROIs(pdPlot.transpose(), iAtlas).transpose()
+
+    # plot the horizontal bar graph for background
+    pdPlot=pdPlot_raw.melt(var_name='cols', value_name='vals')
     pdPlot['cols']=[f'{x} ' for x in pdPlot['cols'].values]
-    g=sns.barplot(data=pdPlot, y='cols', x='vals', estimator=np.median, palette=lsColors, ci=None, ax=ax)
-    g.set(xlabel=None)
+    g0=sns.barplot(data=pdPlot, y='cols', x='vals', estimator=fEstimator, palette=lsColors, ci=None, ax=ax, zorder=0)
+    g0.set(xlabel='\n')
+    g0.set(ylabel=None)
+
+    # plot background p-values
+    aPvals = pdPval.values[(pdPlot_raw==pdPlot_raw.median()).values]
+    ax2=ax.twiny()
+    ax2.grid(False)
+    ax2.plot(aPvals, range(len(aPvals)), color='dimgray', marker='d', ms=6, linewidth=0, linestyle=None)
+    ax2.plot(aPvals, range(len(aPvals)), color='firebrick', marker='d', ms=4, linewidth=0, linestyle=None, alpha=1)
+    ax2.set_xscale("log")
+    ax2.set_xlim(ax2.get_xlim()[::-1])
+    ax2.hlines(xmin=np.ones_like(aPvals), xmax=aPvals, y=range(len(aPvals)), color='dimgray', linewidth=1)
+    ax2.set_zorder(3)
+    ax2.set_facecolor(None)
+
+    # plot the horizontal bar graph again
+    ax3=ax.twiny()
+    ax3.set_zorder(5)
+    g=sns.barplot(data=pdPlot, y='cols', x='vals', estimator=fEstimator, palette=lsColors, ci=None, ax=ax3)
+    g.set(xlabel='\n')
     g.set(ylabel=None)
+    g.set_facecolor(None)
+    g.grid(False)
 
     # add in ttest result labels
     for i,p in enumerate(g.patches):
-        width = p.get_width()
-        ax.text(-pdAtlas[sSort].filter(like='ROI', axis=0).max()*0.0175,
-                p.get_y()+0.60*p.get_height()-0.075,
-                lsIcons[i],
-                ha='center', va='center', size=12, weight='bold')
+        if 15>i>=0:
+            width = p.get_width()
+            ax3.text(-pdAtlas[sSort].filter(like='ROI', axis=0).max()*0.0175,
+                    p.get_y()+0.60*p.get_height()-0.075,
+                    lsIcons[i],
+                    ha='center', va='center', size=12, weight='bold')
                 
     # plot light or dark bars:
-    g_white=sns.barplot(data=pdPlot, y='cols', estimator=np.median, x='vals', edgecolor=(1,1,1,0.3), facecolor=(1,1,1,0), ci=None, ax=ax, hatch='\\', lw=0)
-    g_white.set(xlabel=None)
+    g_white=sns.barplot(data=pdPlot, y='cols', estimator=fEstimator, x='vals', edgecolor=(1,1,1,0.3), facecolor=(1,1,1,0), ci=None, ax=ax3, hatch='\\', lw=0, zorder=15)
+    g_white.set(xlabel='\n')
     g_white.set(ylabel=None)
+    g_white.set_facecolor(None)
+    g_white.grid(False)
 
-    g_black=sns.barplot(data=pdPlot, y='cols', estimator=np.median, x='vals', edgecolor=(0,0,0,0.2), facecolor=(1,1,1,0), ci=None, ax=ax, hatch='/', lw=0)
-    g_black.set(xlabel=None)
+    g_black=sns.barplot(data=pdPlot, y='cols', estimator=fEstimator, x='vals', edgecolor=(0,0,0,0.25), facecolor=(1,1,1,0), ci=None, ax=ax3, hatch='/', lw=0, zorder=15)
+    g_black.set(xlabel='\n')
     g_black.set(ylabel=None)
+    g_black.set_facecolor(None)
+    g_black.grid(False)
 
     for i,p in enumerate(g_white.patches):
         if 30>i>=15:
@@ -260,9 +335,25 @@ def fPlot(pdData, iAtlas, ax, dXData, aYData):
                 p.set_hatch(None)
 
     # plot outlines on bars
-    g_outline=sns.barplot(data=pdPlot, y='cols', estimator=np.median, x='vals', edgecolor='dimgray', facecolor=(1,1,1,0), ci=None, ax=ax, lw=1)
-    g_outline.set(xlabel=None)
+    g_outline=sns.barplot(data=pdPlot, y='cols', estimator=fEstimator, x='vals', edgecolor='dimgray', facecolor=(1,1,1,0), ci=None, ax=ax3, lw=1, zorder=20)
+    g_outline.set(xlabel='\n')
     g_outline.set(ylabel=None)
+    g_outline.set_facecolor(None)
+    g_outline.grid(False)
+
+    # hide extra labels
+    ax3.axes.xaxis.set_visible(False)
+
+    # plot corresponding p-values
+    ax4=ax.twiny()
+    ax4.set_zorder(100)
+    ax4.grid(False)
+    ax4.plot(aPvals, range(len(aPvals)), color='dimgray', marker='d', ms=6, linewidth=0, linestyle=None, zorder=50)
+    ax4.plot(aPvals, range(len(aPvals)), color='firebrick', marker='d', ms=4, linewidth=0, linestyle=None, alpha=1, zorder=60)
+    ax4.set_xscale("log")
+    ax4.set_xlim(ax4.get_xlim()[::-1])
+    ax4.set_facecolor(None)
+
 
 def fPlotAll(pdData, sSavePath=None):
     """ plots all the feature importances, their functions, and asd vs hc comparison for 3 atlases
@@ -280,14 +371,17 @@ def fPlotAll(pdData, sSavePath=None):
     
     for i, iAtlas in enumerate([64,122,197]):
         fPlot(pdData, iAtlas, ax[i], dXData, aYData)
-    plt.xlabel('Importance: standard deviations from mean importance')
-        
+    ax[0].set_xlabel('P-value (FDR corrected)', labelpad=30)
+    ax[0].xaxis.set_label_position('top')
+    ax[2].set_xlabel('Importance: standard deviations from mean importance')
+    plt.subplots_adjust(bottom=-0.1, top=1)
+
     if sSavePath is not None:
-        plt.savefig(sSavePath, bbox_inches='tight')
+        plt.savefig(sSavePath, bbox_inches='tight', dpi=1000)
+        plt.show()
     else:
         plt.show()
 
 if '__main__' == __name__:
     pdData = fLoadImportances('/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/AtlasResolutionComparison8Permutations')
-
     fPlotAll(pdData, '/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/FeatureImportances.png')
