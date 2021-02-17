@@ -176,15 +176,18 @@ def fRenameROIs(pdData, iAtlas):
         pdData=pdData.rename(index={sIndex: sIndex.replace('-', ' to ')})
     return pdData
 
-def fFetchColor(iAtlas):
+def fFetchColor(lsROIs):
     """ formats and fetches desinated colors for funtional mappings
 
     Args:
-        iAtlas (int): atlas resolution (64, 122, or 197)
+        lsROIs (list): roi-to-roi names for lookup
 
     Returns:
         list of colors for seaborn plotting
     """
+    # fetch lookup table:
+    dLookup = json.load(open('/project/bioinformatics/DLLab/s169682/Code/AutismProject/JournalPaperData/ROIFunctions.json', 'r'))
+
     # define deep palette colors
     dColors={
         'r':list(sns.color_palette("deep"))[3],
@@ -194,8 +197,32 @@ def fFetchColor(iAtlas):
         'b':list(sns.color_palette("deep"))[0],
         'v':list(sns.color_palette("deep"))[4]
     }
+
+    def _fColorFunc(sFunc1, sFunc2):
+        if set([sFunc1, sFunc2])==set(['m','m']):
+            return 'b'
+        elif set([sFunc1, sFunc2])==set(['m','o']):
+            return 'g'
+        elif set([sFunc1, sFunc2])==set(['o','o']):
+            return 'y'
+        elif set([sFunc1, sFunc2])==set(['o','l']):
+            return 'o'
+        elif set([sFunc1, sFunc2])==set(['l','l']):
+            return 'r'
+        elif set([sFunc1, sFunc2])==set(['m','l']):
+            return 'v'
+        else:
+            raise NotImplementedError
+    
+    # map ROIs to colors
+    lsColors = []
+    for sROIs in lsROIs:
+        sROI1, sROI2 = sROIs.split(' to ')
+        sFunc1 = dLookup[sROI1]
+        sFunc2 = dLookup[sROI2]
+        lsColors.append(_fColorFunc(sFunc1, sFunc2))
+
     # map color names to color palette colors
-    lsColors = json.load(open('/project/bioinformatics/DLLab/s169682/Code/AutismProject/JournalPaperData/ROIColor.json', 'r'))[str(iAtlas)]
     return [dColors[x] for x in lsColors]
 
 def fTTest(sCol, iAtlas, dXData, aYData):
@@ -269,11 +296,12 @@ def fPlot(pdData, iAtlas, ax, dXData, aYData, sSort='Median'):
     # reorder p values
     pdPval=pdPval[list(pdPlot.columns)]
 
-    #fetch list of colors
-    lsColors = fFetchColor(iAtlas)
-
     # rename ROIs
     pdPlot_raw = fRenameROIs(pdPlot.transpose(), iAtlas).transpose()
+    
+    #fetch list of colors
+    lsColors = fFetchColor(list(pdPlot_raw.columns))
+    #lsColors = fFetchColor(iAtlas)
 
     # plot the horizontal bar graph for background
     pdPlot=pdPlot_raw.melt(var_name='cols', value_name='vals')

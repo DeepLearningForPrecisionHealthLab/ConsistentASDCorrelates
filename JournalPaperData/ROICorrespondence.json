@@ -22,7 +22,9 @@
       "53": "L. Prefrontal Cortex (BA 10)",
       "59": "L. Secondary Visual (BA 18)",
       "61": "L. Frontal Cortex (BA 8)",
-      "62": "L. Parietal Cortex (BA 7)"
+      "62": "L. Parietal Cortex (BA 7)",
+	  "0":  "L. Med. Temporal Gyrus (BA 21)",
+	  "35": "L. Secondary Visual (BA 18)"
    },
    "122": {
       "0": "L. Supplementary Motor (BA 6)",
@@ -49,7 +51,8 @@
       "99": "L. Primary Somatosensory (BA 1)",
       "109": "L. Inf. Frontal Gyrus (BA 47)",
       "117": "L. Fusiform Gyrus (BA 37)",
-      "119": "L. Sup. Temporal Gyrus (BA 22)"
+      "119": "L. Sup. Temporal Gyrus (BA 22)",
+	  "108": "L. Posterior Lobe (Cerebellum)"
    },
    "197": {
       "1": "L. Caudate",
@@ -81,6 +84,16 @@
       "187": "L. Anterior Cingulate (BA 24)",
       "188": "L. Supplementary Motor (BA 6)",
       "192": "L. Temporopolar Area (BA 38)",
-      "195": "L. Prefrontal Cortex (BA 10)"
+      "195": "L. Prefrontal Cortex (BA 10)",
+	  "96": "R. Prefrontal Cortex (BA 10)",
+	  "108": "L. Parietal Cortex (BA 7)",
+	  "26": "L. Thalamus",
+	  "191": "L. Anterior Lobe (Cerebellum)",
+	  "23": "L. Insula (BA 13)",
+	  "132": "L Retrosplenial Cortex (BA 30)",
+	  "18": "L. Caudate",
+	  "75": "L. Assoc. Visual Cortex (BA 19)",
+	  "112": "L. Prefrontal Cortex (BA 10)",
+	  "171": "L. Broca's Area (BA 44)"
    }
 }
