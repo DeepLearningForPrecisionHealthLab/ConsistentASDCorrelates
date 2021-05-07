@@ -190,7 +190,7 @@ def fPermuteAllModels(nPermutations, aActual, dData, dModels):
 
     return dFeatureImportanceByModel
 
-# NOTE Error in cairo plotting module
+# NOTE Error in cairo plotting module, uncomment only NOT on the computing cluster
 # def fPlotFeaturesByImportance(dFeatureImportanceByModel, sModel, sSavePath=None):
 #     """
 #     Plots features sorted by importance

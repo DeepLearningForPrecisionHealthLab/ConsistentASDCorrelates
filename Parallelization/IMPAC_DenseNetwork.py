@@ -28,30 +28,6 @@ from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, reca
 from sklearn.model_selection import StratifiedShuffleSplit
 import pickle
 
-###############################################################################
-#####Following funciton is from: https://stackoverflow.com/questions/41032551/how-to-compute-receiving-operating
-# -characteristic-roc-and-auc-in-keras#####
-# define roc_callback, inspired by https://github.com/keras-team/keras/issues/6050#issuecomment-329996505
-# def auc_roc(y_true, y_pred):
-#     # any tensorflow metric
-#     value, update_op = tf.contrib.metrics.streaming_auc(y_pred, y_true)
-#
-#     # find all variables created for this metric
-#     metric_vars = [i for i in tf.local_variables() if 'auc_roc' in i.name.split('/')[1]]
-#
-#     # Add metric variables to GLOBAL_VARIABLES collection.
-#     # They will be initialized for new session.
-#     for v in metric_vars:
-#         tf.add_to_collection(tf.GraphKeys.GLOBAL_VARIABLES, v)
-#
-#     # force to update metric values
-#     with tf.control_dependencies([update_op]):
-#         value = tf.identity(value)
-#         return value
-#
-# def auc_roc(y_true, y_pred):
-#     return tf.py_func(roc_auc_score, (y_true, y_pred), tf.double)
-
 def precision(y_true, y_pred):
     return tf.py_func(precision_score, (y_true, y_pred), tf.double)
 

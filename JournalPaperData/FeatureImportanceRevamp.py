@@ -310,17 +310,17 @@ def fPlot(pdData, iAtlas, ax, dXData, aYData, sSort='Median'):
     g0.set(xlabel='\n')
     g0.set(ylabel=None)
 
-    # plot background p-values
-    aPvals = pdPval.values[(pdPlot_raw==pdPlot_raw.median()).values]
-    ax2=ax.twiny()
-    ax2.grid(False)
-    ax2.plot(aPvals, range(len(aPvals)), color='dimgray', marker='d', ms=6, linewidth=0, linestyle=None)
-    ax2.plot(aPvals, range(len(aPvals)), color='firebrick', marker='d', ms=4, linewidth=0, linestyle=None, alpha=1)
-    ax2.set_xscale("log")
-    ax2.set_xlim(ax2.get_xlim()[::-1])
-    ax2.hlines(xmin=np.ones_like(aPvals), xmax=aPvals, y=range(len(aPvals)), color='dimgray', linewidth=1)
-    ax2.set_zorder(3)
-    ax2.set_facecolor(None)
+    # # plot background p-values
+    # aPvals = pdPval.values[(pdPlot_raw==pdPlot_raw.median()).values]
+    # ax2=ax.twiny()
+    # ax2.grid(False)
+    # ax2.plot(aPvals, range(len(aPvals)), color='dimgray', marker='d', ms=6, linewidth=0, linestyle=None)
+    # ax2.plot(aPvals, range(len(aPvals)), color='firebrick', marker='d', ms=4, linewidth=0, linestyle=None, alpha=1)
+    # ax2.set_xscale("log")
+    # ax2.set_xlim(ax2.get_xlim()[::-1])
+    # ax2.hlines(xmin=np.ones_like(aPvals), xmax=aPvals, y=range(len(aPvals)), color='dimgray', linewidth=1)
+    # ax2.set_zorder(3)
+    # ax2.set_facecolor(None)
 
     # plot the horizontal bar graph again
     ax3=ax.twiny()
@@ -373,14 +373,14 @@ def fPlot(pdData, iAtlas, ax, dXData, aYData, sSort='Median'):
     ax3.axes.xaxis.set_visible(False)
 
     # plot corresponding p-values
-    ax4=ax.twiny()
-    ax4.set_zorder(100)
-    ax4.grid(False)
-    ax4.plot(aPvals, range(len(aPvals)), color='dimgray', marker='d', ms=6, linewidth=0, linestyle=None, zorder=50)
-    ax4.plot(aPvals, range(len(aPvals)), color='firebrick', marker='d', ms=4, linewidth=0, linestyle=None, alpha=1, zorder=60)
-    ax4.set_xscale("log")
-    ax4.set_xlim(ax4.get_xlim()[::-1])
-    ax4.set_facecolor(None)
+    # ax4=ax.twiny()
+    # ax4.set_zorder(100)
+    # ax4.grid(False)
+    # ax4.plot(aPvals, range(len(aPvals)), color='dimgray', marker='d', ms=6, linewidth=0, linestyle=None, zorder=50)
+    # ax4.plot(aPvals, range(len(aPvals)), color='firebrick', marker='d', ms=4, linewidth=0, linestyle=None, alpha=1, zorder=60)
+    # ax4.set_xscale("log")
+    # ax4.set_xlim(ax4.get_xlim()[::-1])
+    # ax4.set_facecolor(None)
 
 
 def fPlotAll(pdData, sSavePath=None):

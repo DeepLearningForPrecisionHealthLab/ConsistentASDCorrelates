@@ -9,6 +9,7 @@
 /Parallelization/*.p
 *.p
 *.pkl
+*.pptx
 lsGC/
 /lsGC/
 MSDLFileList.csv
