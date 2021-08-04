@@ -1,0 +1,10 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python.pythonPath": "/project/bioinformatics/DLLab/shared/CondaEnvironments/CooperCausality_v7/bin/python"
+	}
+}
