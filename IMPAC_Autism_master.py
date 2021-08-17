@@ -311,7 +311,7 @@ class cMachineLearning(object):
 
 RawData, RawLabels = get_train_data(path="/project/bioinformatics/DLLab/Cooper/Jupyter_notebooks/autism-master/autism-master")
 
-###############  sMRI (anatomical MRI)  ###############  
+###############  sMRI (anatomical MRI)  ###############
 #We select the anatomical data alone
 AnatData = RawData[[col for col in RawData.columns if col.startswith('anatomy')]]
 
