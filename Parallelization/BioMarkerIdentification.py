@@ -22,14 +22,17 @@ import sys
 # from mpl_toolkits.mplot3d import Axes3D
 import sklearn as sk
 import pickle as pkl
-import dill
 import sklearn.metrics as skm
 # import seaborn as sb
 import pandas as pd
 import numpy as np
+import keras
 import keras as k
 import multiprocessing
 import time
+import glob
+import types
+
 
 from joblib import Parallel, delayed
 from joblib import parallel_backend
@@ -42,6 +45,7 @@ from IMPAC_DenseNetwork import get_optimizer_from_config
 from IMPAC_DenseNetwork import add_layer_from_config
 # from IMPAC_LSTM import fLoadLSTM
 from IMPAC_DenseNetwork import network_from_ini_2
+from sklearn.inspection import permutation_importance
 
 def fPermuteFeature(iPermutationNum, sFeature, pdData):
     """
@@ -365,63 +369,138 @@ def fExpandDataframe(sModel, pdDataframe):
 
     return aData
 
-if '__main__'==__name__:
+def fLoadTunedModels(sGlobbablePath='/archive/bioinformatics/DLLab/CooperMellema/results/Autism/ABIDE_Tuned/ABIDE*/Model*_CV0'):
+    lsModels = glob.glob(sGlobbablePath)
+    dModels={1:{},2:{}}
+    dModels[1] = {f"Model{sModel.split('Model')[1].split('_')[0]}_ABIDE{sModel.split('ABIDE')[-1][0]}":keras.models.load_model(sModel) for sModel in lsModels if 'ABIDE1' in sModel}
+    dModels[2] = {f"Model{sModel.split('Model')[1].split('_')[0]}_ABIDE{sModel.split('ABIDE')[-1][0]}":keras.models.load_model(sModel) for sModel in lsModels if 'ABIDE2' in sModel}
+    return dModels
 
+def fFormatTunedX(dModels, dAbide, idxAbide):
+    lsAtlases=['064', '122', '197']
+    dFormattedXData={1:{},2:{}}
+    for i in [1,2]:
+        for k in dModels[i].keys():
+            iModel = int(k.split('Model')[1].split('_')[0])
+            sAtlas = f'BASC{lsAtlases[(iModel-1)%3]}'
+            iAbide = int(k.split('ABIDE')[1][0])
+            dFormattedXData[iAbide].update({
+                k:dAbide[sAtlas].iloc[idxAbide[iAbide],11:].drop([x for x in dAbide[sAtlas].iloc[idxAbide[iAbide],11:].columns if ('Age' in x)], axis=1)
+            })
+    return dFormattedXData
+
+def fPermuteAllModelsSklearn(nPermutations, aYDat, dXDat, dModel, sSaveDir):
+    # define scorer function for PFI
+    def _scorer(self,x,y):
+        return skm.roc_auc_score(y, self.predict(np.expand_dims(np.expand_dims(x, axis=1), axis=3)))
+
+    for sModel in dXDat.keys():
+        # make a predictor object that is compatible with sklearn permutation importance and compiled to be fast
+        cModel = dModel[sModel]
+        cPredictor = k.models.Model(inputs=cModel.inputs, outputs=cModel.outputs)
+        cPredictor._make_predict_function()
+        cPredictor.score = types.MethodType(_scorer, cPredictor)
+
+        # perform PFI
+        pfi=permutation_importance(cPredictor, dXDat[sModel].values, aYDat, n_repeats=nPermutations, random_state=0)
+        pdPFI = pd.DataFrame.from_dict({'mean pfi':pfi.importances_mean, 'std pfi':pfi.importances_std})
+        pdPFI.index=dXDat[sModel].columns
+        pdPFI.to_csv(os.path.join(sSaveDir, f'{sModel}.csv'))
+    return
+
+
+if '__main__'==__name__:
+    bTunedModels=True
+    bSklearn=True
     dXData, aYData = fLoadPDData()
 
-    # NOTE, this uses the full model, not the output predictions
-    # load up the models and the data
-    dModels = {
-        # # 1st best models
-        'Model1': fLoadModels('Dense', 'combined', 'basc064', 43)[0],
-        'Model2': fLoadModels('Dense', 'combined', 'basc122', 39)[0],
-        'Model3': fLoadModels('Dense', 'combined', 'basc197', 15)[0],
-        # # 2nd best models
-        'Model4': fLoadModels('Dense', 'combined', 'basc064', 21)[0],
-        'Model5': fLoadModels('Dense', 'combined', 'basc122', 7)[0],
-        'Model6': fLoadModels('Dense', 'combined', 'basc197', 18)[0],
-        # 3rd best models
-        'Model7': fLoadModels('Dense', 'combined', 'basc064', 2)[0],
-        'Model8': fLoadModels('Dense', 'combined', 'basc122', 2)[0],
-        'Model9': fLoadModels('Dense', 'combined', 'basc197', 25)[0],
-        # 4th best models
-        'Model10': fLoadModels('Dense', 'combined', 'basc064', 31)[0],
-        'Model11': fLoadModels('Dense', 'combined', 'basc122', 22)[0],
-        'Model12': fLoadModels('Dense', 'combined', 'basc197', 6)[0],
-        # 5th best models
-        'Model13': fLoadModels('Dense', 'combined', 'basc064', 22)[0],
-        'Model14': fLoadModels('Dense', 'combined', 'basc122', 15)[0],
-        'Model15': fLoadModels('Dense', 'combined', 'basc197', 2)[0]
-    }
+    if not bTunedModels:
+        # NOTE, this uses the full model, not the output predictions
+        # load up the models and the data
+        dModels = {
+            # # 1st best models
+            'Model1': fLoadModels('Dense', 'combined', 'basc064', 43)[0],
+            'Model2': fLoadModels('Dense', 'combined', 'basc122', 39)[0],
+            'Model3': fLoadModels('Dense', 'combined', 'basc197', 15)[0],
+            # # 2nd best models
+            'Model4': fLoadModels('Dense', 'combined', 'basc064', 21)[0],
+            'Model5': fLoadModels('Dense', 'combined', 'basc122', 7)[0],
+            'Model6': fLoadModels('Dense', 'combined', 'basc197', 18)[0],
+            # 3rd best models
+            'Model7': fLoadModels('Dense', 'combined', 'basc064', 2)[0],
+            'Model8': fLoadModels('Dense', 'combined', 'basc122', 2)[0],
+            'Model9': fLoadModels('Dense', 'combined', 'basc197', 25)[0],
+            # 4th best models
+            'Model10': fLoadModels('Dense', 'combined', 'basc064', 31)[0],
+            'Model11': fLoadModels('Dense', 'combined', 'basc122', 22)[0],
+            'Model12': fLoadModels('Dense', 'combined', 'basc197', 6)[0],
+            # 5th best models
+            'Model13': fLoadModels('Dense', 'combined', 'basc064', 22)[0],
+            'Model14': fLoadModels('Dense', 'combined', 'basc122', 15)[0],
+            'Model15': fLoadModels('Dense', 'combined', 'basc197', 2)[0]
+        }
 
-    # Reformat the data to the right form
-    dFormattedXData = {
-        'Model1': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        'Model2': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        'Model3': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        'Model4': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        'Model5': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        'Model6': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        'Model7': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        'Model8': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        'Model9': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        'Model10': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        'Model11': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        'Model12': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-        'Model13': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
-        'Model14': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
-        'Model15': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
-    }
+        # Reformat the data to the right form
+        dFormattedXData = {
+            'Model1': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+            'Model2': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+            'Model3': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+            'Model4': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+            'Model5': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+            'Model6': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+            'Model7': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+            'Model8': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+            'Model9': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+            'Model10': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+            'Model11': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+            'Model12': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+            'Model13': dXData['basc064'].drop([x for x in dXData['basc064'].columns if (x.__contains__('Age'))], axis=1),
+            'Model14': dXData['basc122'].drop([x for x in dXData['basc122'].columns if (x.__contains__('Age'))], axis=1),
+            'Model15': dXData['basc197'].drop([x for x in dXData['basc197'].columns if (x.__contains__('Age'))], axis=1),
+        }
+    else:
+        import tensorflow as tf
+        from ABIDE_TestIMPACModels import fLoadABIDE_Data
+        dModels = fLoadTunedModels()
+        dAbide = fLoadABIDE_Data()
+        aYData = np.expand_dims(dAbide['BASC122']['ASD'].values, axis=-1)
 
-    # Permute the models
-    nPermutations = 64
-    dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData, dFormattedXData, dModels)
+        # Reformat the data to the right form
+        idxAbide={}
+        idxAbide[1]=(dAbide['BASC122']['ABIDE']==1).values
+        idxAbide[2]=(dAbide['BASC122']['ABIDE']==2).values
+        dFormattedXData = fFormatTunedX(dModels, dAbide, idxAbide)
 
-    # Save it
-    sSaveDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/PFI'\
-        f'/AtlasResolutionComparison{nPermutations}Permutations'
+    if not bTunedModels:
+        # Permute the models
+        nPermutations = 64
+        dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData, dFormattedXData, dModels)
 
-    if not os.path.isdir(sSaveDir): os.mkdirs(sSaveDir)
+        # Save it
+        sSaveDir=f'/project/bioinformatics/DLLab/Cooper/Code/AutismProject/JournalPaperData/PFI'\
+            f'/AtlasResolutionComparison{"Tuned" if bTunedModels else ""}{nPermutations}Permutations'
 
-    pkl.dump(dFeatureImportanceByModel, open(os.path.join(
-        sSaveDir,f'AllTSEFeatureImportances{nPermutations}Permutations.p'), 'wb'))
+        os.makedirs(sSaveDir, exist_ok=True)
+
+        pkl.dump(dFeatureImportanceByModel, open(os.path.join(
+            sSaveDir,f'AllTSEFeatureImportances{nPermutations}Permutations.p'), 'wb'))
+    else:
+        for iAbide in [1,2]:
+            # Permute the models
+            nPermutations = 64
+            if bSklearn:
+                sSaveDir=f'/archive/bioinformatics/DLLab/CooperMellema/results/Autism/ABIDE_Tuned/'\
+                    f'ABIDE{iAbide}/PFI{"_Tuned" if bTunedModels else ""}_{nPermutations}Permutations'
+                os.makedirs(sSaveDir, exist_ok=True)
+                fPermuteAllModelsSklearn(nPermutations, aYData[idxAbide[iAbide]], dFormattedXData[iAbide], dModels[iAbide], sSaveDir=sSaveDir)
+            else:
+                dFeatureImportanceByModel = fPermuteAllModels(nPermutations, aYData[idxAbide[iAbide]], dFormattedXData[iAbide], dModels[iAbide])
+
+                # Save it
+                sSaveDir=f'/archive/bioinformatics/DLLab/CooperMellema/results/Autism/ABIDE_Tuned/PFI'\
+                    f'/ABIDE{iAbide}/AtlasResolutionComparison{"Tuned" if bTunedModels else ""}{nPermutations}Permutations'
+
+                os.makedirs(sSaveDir, exist_ok=True)
+
+                pkl.dump(dFeatureImportanceByModel, open(os.path.join(
+                    sSaveDir,f'AllTSEFeatureImportances{nPermutations}Permutations.p'), 'wb'))

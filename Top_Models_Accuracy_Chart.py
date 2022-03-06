@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 get_ipython().run_line_magic('matplotlib', 'inline')
 import seaborn as sns
 import pickle as pkl
+from sklearn.metrics import roc_curve, roc_auc_score
 
 
 # %%

@@ -104,7 +104,6 @@ def fPValueFill(pdData, lsCols, iAtlas, sPath='/project/bioinformatics/DLLab/Coo
 
     else:
         pdPvals = pd.read_csv(f'{sPath}_{iAtlas}.csv', index_col=0)
-    
     return pdPvals
 
 def fGenerateNullDistribution(df):
@@ -392,11 +391,11 @@ def fPlotAll(pdData, sSavePath=None):
     """
     dims = (8, 10)
     fig, ax = plt.subplots(3, figsize=dims)
-    
+
     sData='/project/bioinformatics/DLLab/Cooper/Code/AutismProject/AllDataWithConfounds.p'
     #Dictionary that containes the whole dataset (train and test) in pd dataframe
     [dXData, aYData] = pkl.load(open(sData, 'rb'))
-    
+
     for i, iAtlas in enumerate([64,122,197]):
         fPlot(pdData, iAtlas, ax[i], dXData, aYData)
     ax[0].set_xlabel('P-value (FDR corrected)', labelpad=30)

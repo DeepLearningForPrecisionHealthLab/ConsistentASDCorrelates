@@ -22,6 +22,7 @@ TrainTestData.p
 .idea/
 .ipynb_checkpoints/
 *.xlsx
+*.tif
 *.pdf
 __pycache__/
 /__pycache__/
