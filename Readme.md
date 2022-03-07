@@ -1,2 +1,2 @@
 # ConsistentASDCorrelates
-Repo for paper by Mellema et. al on consistent ASD Correlates
+See: [https://github.com/DeepLearningForPrecisionHealthLab/ConsistentASDCorrelates](https://github.com/DeepLearningForPrecisionHealthLab/ConsistentASDCorrelates) for the repo for the paper: "Reproducible neuroimaging features for diagnosis of Autism spectrum disorder with machine learning"
